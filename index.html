@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Immersive XR with Webcam</title>
+  <title>Immersive XR with Manual Button</title>
   <style>
     body { margin: 0; overflow: hidden; background: white; }
-    canvas { display: block; }
     #enterXR {
       position: absolute;
       top: 20px;
@@ -27,60 +26,65 @@
   <button id="enterXR">Enter XR</button>
   <video id="video" autoplay playsinline></video>
 
-  <script type="module">
-    import * as THREE from 'https://cdn.skypack.dev/three';
+  <!-- Three.js core -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <!-- VRButton helper -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/vr/VRButton.js"></script>
 
-    // Scene setup
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color('white');
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      // Scene setup
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('white');
 
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-    camera.position.z = 2;
+      const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
+      camera.position.z = 2;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true;
-    document.body.appendChild(renderer.domElement);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
 
-    // Add cube
-    const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-    const material = new THREE.MeshNormalMaterial();
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
+      // Add cube
+      const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+      const material = new THREE.MeshNormalMaterial();
+      const cube = new THREE.Mesh(geometry, material);
+      scene.add(cube);
 
-    // Animate
-    renderer.setAnimationLoop(() => {
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.01;
-      renderer.render(scene, camera);
-    });
-
-    // Manual XR button
-    const button = document.getElementById('enterXR');
-    button.addEventListener('click', async () => {
-      if (navigator.xr) {
-        try {
-          const session = await navigator.xr.requestSession('immersive-vr', {
-            optionalFeatures: ['local-floor', 'bounded-floor']
-          });
-          renderer.xr.setSession(session);
-        } catch (err) {
-          console.error('XR session failed:', err);
-        }
-      } else {
-        alert('WebXR not supported on this browser.');
-      }
-    });
-
-    // Webcam access
-    const video = document.getElementById('video');
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => {
-        video.srcObject = stream;
-      })
-      .catch(err => {
-        console.error('Webcam access failed:', err);
+      // Animate
+      renderer.setAnimationLoop(() => {
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.01;
+        renderer.render(scene, camera);
       });
+
+      // Manual XR button
+      const button = document.getElementById('enterXR');
+      button.addEventListener('click', async () => {
+        if (navigator.xr) {
+          try {
+            const session = await navigator.xr.requestSession('immersive-vr', {
+              optionalFeatures: ['local-floor', 'bounded-floor']
+            });
+            renderer.xr.setSession(session);
+          } catch (err) {
+            console.error('XR session failed:', err);
+          }
+        } else {
+          alert('WebXR not supported');
+        }
+      });
+
+      // Webcam access
+      const video = document.getElementById('video');
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          video.srcObject = stream;
+        })
+        .catch(err => {
+          console.error('Webcam access failed:', err);
+        });
+    });
   </script>
 </body>
 </html>
