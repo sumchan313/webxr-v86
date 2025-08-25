@@ -56,8 +56,8 @@
     let scene, camera, renderer, cube;
     let leftCamera, rightCamera;
     let isLVR = false, isStereoAR = false;
-    let t = 0, cameraFeedStarted = false;
     let currentModel = null;
+    let t = 0;
     const fingertips = [4, 8, 12, 16, 20];
     const fingertipMeshes = [];
 
@@ -90,10 +90,14 @@
         fingertipMeshes.push(mesh);
       });
 
-      renderer.setAnimationLoop(() => {
+      renderer.setAnimationLoop((timestamp, frame) => {
         t += 0.01;
-        cube.position.y = 0.5 + Math.sin(t) * 0.05;
-        if (isLVR || isStereoAR) {
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.01;
+
+        if (renderer.xr.isPresenting) {
+          renderer.render(scene, camera);
+        } else if (isLVR || isStereoAR) {
           renderStereo();
         } else {
           renderer.render(scene, camera);
@@ -117,16 +121,12 @@
       });
 
       document.getElementById('startCamera').addEventListener('click', () => {
-        if (cameraFeedStarted) return;
-        cameraFeedStarted = true;
-
         navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" }, width: 1920, height: 1080 }
         }).then(stream => {
           video.srcObject = stream;
         }).catch(err => {
           alert('Camera access denied: ' + err.message);
-          console.error('Camera error:', err);
         });
 
         const hands = new Hands({
@@ -183,36 +183,9 @@
           const session = await navigator.xr.requestSession('immersive-ar', {
             requiredFeatures: ['local-floor', 'hit-test']
           });
-
           renderer.xr.setSession(session);
-          const refSpace = await session.requestReferenceSpace('local-floor');
-          const viewerSpace = await session.requestReferenceSpace('viewer');
-          const hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-
-          session.addEventListener('end', () => console.log('AR session ended'));
-
-          renderer.setAnimationLoop((timestamp, frame) => {
-            if (frame) {
-              const hitTestResults = frame.getHitTestResults(hitTestSource);
-              if (hitTestResults.length > 0) {
-                const hit = hitTestResults[0];
-                const pose = hit.getPose(refSpace);
-                if (pose) {
-                  cube.position.set(
-                    pose.transform.position.x,
-                    pose.transform.position.y,
-                    pose.transform.position.z
-                  );
-                }
-              }
-            }
-            renderer.render(scene, camera);
-          });
-
-          console.log('AR session started');
         } catch (err) {
           console.error('AR session failed:', err);
-          alert('AR session failed: ' + err.message);
         }
       });
 
@@ -229,4 +202,28 @@
         leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         leftCamera.position.set(-0.03, 0, 0);
-        rightCamera.position.set
+        rightCamera.position.set(0.03, 0, 0);
+
+        if (navigator.xr) {
+          try {
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local']
+            });
+            renderer.xr.setSession(session);
+          } catch (err) {
+            console.error('AR-as-VR session failed:', err);
+          }
+        } else {
+          alert('WebXR not supported');
+        }
+      });
+
+      function renderStereo() {
+        renderer.setScissorTest(true);
+
+        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, leftCamera);
+
+        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(window.inner
