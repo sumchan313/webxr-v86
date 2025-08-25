@@ -2,33 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Immersive Hand Tracking XR</title>
+  <title>Immersive XR with Webcam</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; background: white; }
     canvas { display: block; }
-    #video { display: none; }
+    #enterXR {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: black;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #video {
+      display: none;
+    }
   </style>
 </head>
 <body>
+  <button id="enterXR">Enter XR</button>
   <video id="video" autoplay playsinline></video>
+
   <script type="module">
     import * as THREE from 'https://cdn.skypack.dev/three';
-    import { VRButton } from 'https://cdn.skypack.dev/three/examples/jsm/webxr/VRButton.js';
 
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('white');
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 100);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
     camera.position.z = 2;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
-    document.body.appendChild(VRButton.createButton(renderer));
 
-    // Add a cube
-    const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    // Add cube
+    const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
     const material = new THREE.MeshNormalMaterial();
     const cube = new THREE.Mesh(geometry, material);
     scene.add(cube);
@@ -40,14 +55,32 @@
       renderer.render(scene, camera);
     });
 
-    // Webcam setup for hand tracking
-    const video = document.getElementById('video');
-    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-      video.srcObject = stream;
+    // Manual XR button
+    const button = document.getElementById('enterXR');
+    button.addEventListener('click', async () => {
+      if (navigator.xr) {
+        try {
+          const session = await navigator.xr.requestSession('immersive-vr', {
+            optionalFeatures: ['local-floor', 'bounded-floor']
+          });
+          renderer.xr.setSession(session);
+        } catch (err) {
+          console.error('XR session failed:', err);
+        }
+      } else {
+        alert('WebXR not supported on this browser.');
+      }
     });
 
-    // You can now integrate MediaPipe here to track hands and map gestures to cube movement
-    // For full gesture control, you'd use MediaPipe Hands and map index finger position to cube.x/y/z
+    // Webcam access
+    const video = document.getElementById('video');
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        console.error('Webcam access failed:', err);
+      });
   </script>
 </body>
 </html>
