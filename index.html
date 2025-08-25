@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AR + LVR + VR Hand Playground</title>
+  <title>Babylon WebXR Hand Playground</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
     button, input[type="file"] {
@@ -16,216 +16,110 @@
       border: none;
       cursor: pointer;
     }
-    #enterAR { left: 20px; }
-    #enterLVR { left: 140px; }
-    #enterARVR { left: 260px; }
-    #startCamera { left: 380px; }
-    #uploadOBJ { left: 500px; }
-    #handOverlayMode { left: 620px; }
-    #video {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      width: 200px;
-      border: 2px solid pink;
-      z-index: 10;
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 5;
-      pointer-events: none;
-      background: transparent;
-    }
+    #enterVR { left: 20px; }
+    #uploadOBJ { left: 140px; }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
   </style>
 </head>
 <body>
-  <button id="enterAR">Enter AR</button>
-  <button id="enterLVR">Enter LVR</button>
-  <button id="enterARVR">Enter VR</button>
-  <button id="startCamera">Start Camera</button>
+  <button id="enterVR">Enter VR</button>
   <input type="file" id="uploadOBJ" accept=".obj" />
-  <button id="handOverlayMode">Hand Overlay Mode</button>
-  <video id="video" autoplay playsinline muted></video>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/OBJLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <canvas id="renderCanvas"></canvas>
+
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 
   <script>
-    let scene, camera, renderer, cube;
-    let leftCamera, rightCamera;
-    let isLVR = false, isStereoAR = false, handOverlayMode = false;
-    let currentModel = null;
-    let t = 0;
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+
+    const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 1.6, -2), scene);
+    camera.attachControl(canvas, true);
+
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+    const cube = BABYLON.MeshBuilder.CreateBox("cube", { size: 0.2 }, scene);
+    cube.position.z = 1;
+    cube.material = new BABYLON.StandardMaterial("mat", scene);
+    cube.material.emissiveColor = BABYLON.Color3.FromHexString("#ff69b4");
+
     let isCubeGrabbed = false;
-    let grabOffset = new THREE.Vector3();
-    const fingertips = [4, 8, 12, 16, 20];
-    const fingertipMeshes = [];
-    const handDots = [];
+    let grabOffset = new BABYLON.Vector3();
 
-    window.addEventListener('DOMContentLoaded', () => {
-      scene = new THREE.Scene();
-      scene.background = null;
-
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.z = 2;
-
-      renderer = new THREE.WebGLRenderer({ alpha: true });
-      renderer.setClearColor(0x000000, 0);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
-
-      cube = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 0.2, 0.2),
-        new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.5 })
-      );
-      cube.position.set(0, 0, -1);
-      scene.add(cube);
-
-      const light = new THREE.PointLight(0xff69b4, 1, 10);
-      light.position.set(0, 1, 2);
-      scene.add(light);
-
-      fingertips.forEach(() => {
-        const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.01, 8, 8),
-          new THREE.MeshBasicMaterial({ color: 0xff69b4 })
-        );
-        scene.add(mesh);
-        fingertipMeshes.push(mesh);
-      });
-
-      for (let i = 0; i < 21; i++) {
-        const dot = new THREE.Mesh(
-          new THREE.SphereGeometry(0.005, 8, 8),
-          new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-        );
-        scene.add(dot);
-        handDots.push(dot);
-      }
-      renderer.setAnimationLoop(() => {
-        t += 0.01;
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.01;
-
-        if (isCubeGrabbed && handDots[8]) {
-          cube.position.copy(handDots[8].position).add(grabOffset);
-          cube.material.emissive.set(0xffff00);
-        } else {
-          cube.material.emissive.set(0xff69b4);
-        }
-
-        if (renderer.xr.isPresenting) {
-          renderer.render(scene, camera);
-        } else if (isLVR || isStereoAR) {
-          renderStereo();
-        } else {
-          renderer.render(scene, camera);
+    scene.createDefaultXRExperienceAsync({}).then(xrHelper => {
+      const featureManager = xrHelper.baseExperience.featuresManager;
+      featureManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
+        xrInput: xrHelper.input,
+        jointMeshes: {
+          enablePhysics: false,
+          sourceMesh: BABYLON.MeshBuilder.CreateSphere("joint", { diameter: 0.01 }, scene),
+          keepOriginalVisible: true
         }
       });
 
-      document.getElementById('enterAR').addEventListener('click', async () => {
-        if (!navigator.xr || !window.isSecureContext) {
-          alert('WebXR not supported or insecure context.');
-          return;
-        }
-        try {
-          const session = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['local-floor', 'hit-test']
-          });
-          renderer.xr.setSession(session);
-        } catch (err) {
-          alert('AR session failed.');
-        }
-      });
+      const handTracking = featureManager.getEnabledFeature(BABYLON.WebXRFeatureName.HAND_TRACKING);
 
-      document.getElementById('enterLVR').addEventListener('click', () => {
-        isLVR = true;
-        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        leftCamera.position.set(-0.03, 0, 2);
-        rightCamera.position.set(0.03, 0, 2);
-      });
+      handTracking.onHandAddedObservable.add(hand => {
+        scene.onBeforeRenderObservable.add(() => {
+          const indexTip = hand.getJointMesh("index-finger-tip");
+          const thumbTip = hand.getJointMesh("thumb-tip");
 
-      document.getElementById('enterARVR').addEventListener('click', async () => {
-        isStereoAR = true;
-        scene.background = new THREE.Color(0x000000);
-        renderer.setClearColor(0x000000, 1);
-        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        leftCamera.position.set(-0.03, 0, 0);
-        rightCamera.position.set(0.03, 0, 0);
-        if (navigator.xr) {
-          try {
-            const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local']
-            });
-            renderer.xr.setSession(session);
-          } catch (err) {
-            alert('AR-as-VR session failed.');
-          }
-        }
-      });
-
-      function renderStereo() {
-        renderer.setScissorTest(true);
-        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.render(scene, leftCamera);
-        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.render(scene, rightCamera);
-        renderer.setScissorTest(false);
-      }
-
-      document.getElementById('startCamera').addEventListener('click', () => {
-        const video = document.getElementById('video');
-        const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
-
-        hands.onResults(results => {
-          if (results.multiHandLandmarks.length > 0) {
-            const landmarks = results.multiHandLandmarks[0];
-            landmarks.forEach((lm, i) => {
-              const x = (lm.x - 0.5) * 4;
-              const y = -(lm.y - 0.5) * 3;
-              const z = -1 + lm.z * 2;
-              handDots[i].position.set(x, y, z);
-            });
-
-            const indexTip = handDots[8].position;
-            const thumbTip = handDots[4].position;
-            const pinchDistance = indexTip.distanceTo(thumbTip);
-            const isPinching = pinchDistance < 0.03;
+          if (indexTip && thumbTip) {
+            const distance = BABYLON.Vector3.Distance(indexTip.getAbsolutePosition(), thumbTip.getAbsolutePosition());
+            const isPinching = distance < 0.02;
 
             if (isPinching && !isCubeGrabbed) {
-              const distance = cube.position.distanceTo(indexTip);
-              if (distance < 0.3) {
+              const handPos = indexTip.getAbsolutePosition();
+              const cubeDistance = BABYLON.Vector3.Distance(cube.position, handPos);
+              if (cubeDistance < 0.3) {
                 isCubeGrabbed = true;
-                grabOffset.copy(cube.position).sub(indexTip);
+                grabOffset.copyFrom(cube.position.subtract(handPos));
               }
+            }
+
+            if (isCubeGrabbed) {
+              const handPos = indexTip.getAbsolutePosition();
+              cube.position.copyFrom(handPos.add(grabOffset));
+              cube.material.emissiveColor = BABYLON.Color3.Yellow();
             }
 
             if (!isPinching && isCubeGrabbed) {
               isCubeGrabbed = false;
+              cube.material.emissiveColor = BABYLON.Color3.FromHexString("#ff69b4");
             }
           }
         });
-
-        const cameraFeed = new Camera(video, {
-          onFrame: async () => {
-            await hands.send({ image: video });
-          },
-          width: 640,
-          height: 480
-        });
-        cameraFeed.start();
       });
+
+      document.getElementById("enterVR").addEventListener("click", async () => {
+        await xrHelper.baseExperience.enterXRAsync("immersive-vr", "local-floor");
+      });
+    });
+
+    document.getElementById("uploadOBJ").addEventListener("change", event => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const objData = e.target.result;
+        BABYLON.SceneLoader.ImportMesh("", "", objData, scene, meshes => {
+          meshes.forEach(mesh => mesh.position.z = 1);
+        }, null, null, ".obj");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    engine.runRenderLoop(() => {
+      scene.render();
+    });
+
+    window.addEventListener("resize", () => {
+      engine.resize();
     });
   </script>
 </body>
 </html>
-
