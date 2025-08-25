@@ -1,1 +1,125 @@
-https://github.com/sumchan313/webxr-v86/actions/runs/17212151139
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Babylon WebXR Hand Playground</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; }
+    button, input[type="file"] {
+      position: absolute;
+      top: 20px;
+      z-index: 10;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: pink;
+      color: black;
+      border: none;
+      cursor: pointer;
+    }
+    #enterVR { left: 20px; }
+    #uploadOBJ { left: 140px; }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <button id="enterVR">Enter VR</button>
+  <input type="file" id="uploadOBJ" accept=".obj" />
+
+  <canvas id="renderCanvas"></canvas>
+
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+
+  <script>
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+
+    const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 1.6, -2), scene);
+    camera.attachControl(canvas, true);
+
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+    const cube = BABYLON.MeshBuilder.CreateBox("cube", { size: 0.2 }, scene);
+    cube.position.z = 1;
+    cube.material = new BABYLON.StandardMaterial("mat", scene);
+    cube.material.emissiveColor = BABYLON.Color3.FromHexString("#ff69b4");
+
+    let isCubeGrabbed = false;
+    let grabOffset = new BABYLON.Vector3();
+
+    scene.createDefaultXRExperienceAsync({}).then(xrHelper => {
+      const featureManager = xrHelper.baseExperience.featuresManager;
+      featureManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
+        xrInput: xrHelper.input,
+        jointMeshes: {
+          enablePhysics: false,
+          sourceMesh: BABYLON.MeshBuilder.CreateSphere("joint", { diameter: 0.01 }, scene),
+          keepOriginalVisible: true
+        }
+      });
+
+      const handTracking = featureManager.getEnabledFeature(BABYLON.WebXRFeatureName.HAND_TRACKING);
+
+      handTracking.onHandAddedObservable.add(hand => {
+        scene.onBeforeRenderObservable.add(() => {
+          const indexTip = hand.getJointMesh("index-finger-tip");
+          const thumbTip = hand.getJointMesh("thumb-tip");
+
+          if (indexTip && thumbTip) {
+            const distance = BABYLON.Vector3.Distance(indexTip.getAbsolutePosition(), thumbTip.getAbsolutePosition());
+            const isPinching = distance < 0.02;
+
+            if (isPinching && !isCubeGrabbed) {
+              const handPos = indexTip.getAbsolutePosition();
+              const cubeDistance = BABYLON.Vector3.Distance(cube.position, handPos);
+              if (cubeDistance < 0.3) {
+                isCubeGrabbed = true;
+                grabOffset.copyFrom(cube.position.subtract(handPos));
+              }
+            }
+
+            if (isCubeGrabbed) {
+              const handPos = indexTip.getAbsolutePosition();
+              cube.position.copyFrom(handPos.add(grabOffset));
+              cube.material.emissiveColor = BABYLON.Color3.Yellow();
+            }
+
+            if (!isPinching && isCubeGrabbed) {
+              isCubeGrabbed = false;
+              cube.material.emissiveColor = BABYLON.Color3.FromHexString("#ff69b4");
+            }
+          }
+        });
+      });
+
+      document.getElementById("enterVR").addEventListener("click", async () => {
+        await xrHelper.baseExperience.enterXRAsync("immersive-vr", "local-floor");
+      });
+    });
+
+    document.getElementById("uploadOBJ").addEventListener("change", event => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const objData = e.target.result;
+        BABYLON.SceneLoader.ImportMesh("", "", objData, scene, meshes => {
+          meshes.forEach(mesh => mesh.position.z = 1);
+        }, null, null, ".obj");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    engine.runRenderLoop(() => {
+      scene.render();
+    });
+
+    window.addEventListener("resize", () => {
+      engine.resize();
+    });
+  </script>
+</body>
+</html>
