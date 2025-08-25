@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR + LVR + VR Hand Tracking</title>
+  <title>AR + LVR + VR Hand Tracking with Camera Overlay</title>
   <style>
     body { margin: 0; overflow: hidden; }
     #enterAR, #enterLVR, #enterARVR {
       position: absolute;
       top: 20px;
       left: 20px;
-      z-index: 10;
+      z-index: 2;
       padding: 10px 20px;
       font-size: 16px;
       background: black;
@@ -22,11 +22,18 @@
     #enterARVR { left: 260px; }
     #video {
       position: absolute;
-      bottom: 20px;
-      right: 20px;
-      width: 200px;
-      border: 2px solid black;
-      z-index: 10;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 0;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
     }
   </style>
 </head>
@@ -49,7 +56,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.z = 2;
+      camera.position.z = 1;
 
       renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -59,8 +66,9 @@
 
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
-        new THREE.MeshNormalMaterial()
+        new THREE.MeshNormalMaterial({ transparent: true, opacity: 0.8 })
       );
+      cube.position.set(0, 0, -0.5);
       scene.add(cube);
 
       renderer.setAnimationLoop(() => {
@@ -90,8 +98,8 @@
         isLVR = true;
         leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        leftCamera.position.set(-0.03, 0, 2);
-        rightCamera.position.set(0.03, 0, 2);
+        leftCamera.position.set(-0.03, 0, 1);
+        rightCamera.position.set(0.03, 0, 1);
       });
 
       document.getElementById('enterARVR').addEventListener('click', async () => {
