@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR Hand Tracking with Cube Grab</title>
+  <title>AR Cube Grab with MediaPipe Hands</title>
   <style>
     body { margin: 0; overflow: hidden; }
     #enterAR {
@@ -19,17 +19,16 @@
     }
     #video {
       position: absolute;
-      bottom: 20px;
-      right: 20px;
-      width: 200px;
-      border: 2px solid black;
-      z-index: 10;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
   <button id="enterAR">Enter AR</button>
-  <video id="video" autoplay playsinline></video>
+  <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -40,7 +39,7 @@
     let isGrabbing = false;
 
     window.addEventListener('DOMContentLoaded', () => {
-      // Scene setup
+      // THREE.js scene setup
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
       camera.position.z = 2;
@@ -51,7 +50,7 @@
       renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
 
-      // Cube
+      // Cube object
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial()
@@ -63,7 +62,7 @@
         renderer.render(scene, camera);
       });
 
-      // AR Button
+      // AR session trigger
       document.getElementById('enterAR').addEventListener('click', async () => {
         if (navigator.xr) {
           try {
@@ -79,7 +78,7 @@
         }
       });
 
-      // Back camera access
+      // Camera feed for MediaPipe
       const video = document.getElementById('video');
       navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" }
@@ -90,7 +89,7 @@
         console.error("❌ Camera access failed:", err);
       });
 
-      // MediaPipe Hands
+      // MediaPipe Hands setup
       const hands = new Hands({
         locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
