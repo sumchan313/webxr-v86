@@ -15,6 +15,7 @@
   <canvas id="xr-canvas"></canvas>
   <div id="output">Typed: </div>
 
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -22,18 +23,25 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/VRButton.js"></script>
 
   <script>
+    // Request rear camera
     const webcam = document.getElementById('webcam');
-    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }
+    }).then(stream => {
       webcam.srcObject = stream;
+    }).catch(err => {
+      console.error("Camera access error:", err);
     });
 
+    // Three.js setup
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 100);
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
     const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('xr-canvas'), alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
     document.body.appendChild(VRButton.createButton(renderer));
 
+    // Output text
     const output = document.getElementById('output');
     let typedText = "";
 
@@ -52,7 +60,12 @@
 
     // Hand tracking
     const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
 
     hands.onResults(results => {
       if (!results.multiHandLandmarks.length) return;
@@ -63,7 +76,7 @@
       keyMeshes.forEach(mesh => {
         const dx = mesh.position.x - x;
         const dy = mesh.position.y - y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
+        const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < 0.1) {
           mesh.material.color.set(0xff0000);
           if (!mesh.userData.pressed) {
@@ -79,6 +92,7 @@
       });
     });
 
+    // Start camera feed
     const cameraFeed = new Camera(webcam, {
       onFrame: async () => await hands.send({ image: webcam }),
       width: 640,
@@ -86,6 +100,7 @@
     });
     cameraFeed.start();
 
+    // Render loop
     renderer.setAnimationLoop(() => {
       renderer.render(scene, camera);
     });
