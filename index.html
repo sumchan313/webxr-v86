@@ -1,106 +1,153 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>AR Cube Grab</title>
+  <meta charset="UTF-8">
+  <title>AR Hand Tracking with Cube Grab</title>
   <style>
     body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
-    video { display: none; }
+    #enterAR {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: black;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #video {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      border: 2px solid black;
+      z-index: 10;
+    }
   </style>
 </head>
 <body>
+  <button id="enterAR">Enter AR</button>
   <video id="video" autoplay playsinline></video>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
 
   <script>
+    let cube, renderer, scene, camera;
     let isGrabbing = false;
 
-    // Setup Three.js scene
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+    window.addEventListener('DOMContentLoaded', () => {
+      // Scene setup
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
+      camera.position.z = 2;
 
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.2, 0.2),
-      new THREE.MeshNormalMaterial()
-    );
-    cube.position.z = -0.5;
-    scene.add(cube);
+      renderer = new THREE.WebGLRenderer({ alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      renderer.setClearColor(0x000000, 0);
+      document.body.appendChild(renderer.domElement);
 
-    camera.position.z = 1;
-
-    function animate() {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    // Setup MediaPipe Hands
-    const hands = new Hands({
-      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
-
-    hands.onResults(results => {
-      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-        isGrabbing = false;
-        return;
-      }
-
-      const landmarks = results.multiHandLandmarks[0];
-      const indexTip = landmarks[8];
-      const thumbTip = landmarks[4];
-
-      const pinchDistance = Math.hypot(
-        indexTip.x - thumbTip.x,
-        indexTip.y - thumbTip.y
+      // Cube
+      cube = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.2, 0.2),
+        new THREE.MeshNormalMaterial()
       );
+      cube.position.set(0, 0, -0.5);
+      scene.add(cube);
 
-      const x = (indexTip.x - 0.5) * 2;
-      const y = -(indexTip.y - 0.5) * 2;
-      const z = -0.5;
+      renderer.setAnimationLoop(() => {
+        renderer.render(scene, camera);
+      });
 
-      const pinchThreshold = 0.05;
-      const grabRadius = 0.3;
-
-      if (pinchDistance < pinchThreshold) {
-        const distToCube = Math.hypot(
-          cube.position.x - x,
-          cube.position.y - y
-        );
-
-        if (!isGrabbing && distToCube < grabRadius) {
-          isGrabbing = true;
+      // AR Button
+      document.getElementById('enterAR').addEventListener('click', async () => {
+        if (navigator.xr) {
+          try {
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local-floor']
+            });
+            renderer.xr.setSession(session);
+          } catch (err) {
+            console.error('AR session failed:', err);
+          }
+        } else {
+          alert('WebXR AR not supported');
         }
+      });
 
-        if (isGrabbing) {
-          cube.position.set(x, y, z);
+      // Back camera access
+      const video = document.getElementById('video');
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+      }).then(stream => {
+        video.srcObject = stream;
+        console.log("✅ Camera stream started");
+      }).catch(err => {
+        console.error("❌ Camera access failed:", err);
+      });
+
+      // MediaPipe Hands
+      const hands = new Hands({
+        locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+      });
+
+      hands.onResults(results => {
+        if (results.multiHandLandmarks.length > 0) {
+          const landmarks = results.multiHandLandmarks[0];
+          const indexTip = landmarks[8];
+          const thumbTip = landmarks[4];
+
+          const pinchDistance = Math.hypot(
+            indexTip.x - thumbTip.x,
+            indexTip.y - thumbTip.y
+          );
+
+          const x = (indexTip.x - 0.5) * 2;
+          const y = -(indexTip.y - 0.5) * 2;
+          const z = -0.5;
+
+          const pinchThreshold = 0.05;
+          const grabRadius = 0.3;
+
+          if (pinchDistance < pinchThreshold) {
+            const distToCube = Math.hypot(
+              cube.position.x - x,
+              cube.position.y - y
+            );
+
+            if (!isGrabbing && distToCube < grabRadius) {
+              isGrabbing = true;
+            }
+
+            if (isGrabbing) {
+              cube.position.set(x, y, z);
+            }
+          } else {
+            isGrabbing = false;
+          }
         }
-      } else {
-        isGrabbing = false;
-      }
-    });
+      });
 
-    // Setup camera input
-    const videoElement = document.getElementById('video');
-    const cameraFeed = new Camera(videoElement, {
-      onFrame: async () => {
-        await hands.send({ image: videoElement });
-      },
-      width: 640,
-      height: 480
+      const cameraFeed = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 640,
+        height: 480
+      });
+      cameraFeed.start();
     });
-    cameraFeed.start();
   </script>
 </body>
 </html>
