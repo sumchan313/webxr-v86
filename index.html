@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Immersive XR with Manual Button</title>
+  <title>Immersive XR with Hand Tracking</title>
   <style>
     body { margin: 0; overflow: hidden; background: white; }
     #enterXR {
@@ -18,7 +18,12 @@
       cursor: pointer;
     }
     #video {
-      display: none;
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      border: 2px solid black;
+      z-index: 10;
     }
   </style>
 </head>
@@ -26,14 +31,17 @@
   <button id="enterXR">Enter XR</button>
   <video id="video" autoplay playsinline></video>
 
-  <!-- Three.js core -->
+  <!-- Three.js -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <!-- VRButton helper -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/vr/VRButton.js"></script>
+  <!-- MediaPipe Hands -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
+    let cube;
+
     window.addEventListener('DOMContentLoaded', () => {
-      // Scene setup
+      // Three.js scene
       const scene = new THREE.Scene();
       scene.background = new THREE.Color('white');
 
@@ -45,20 +53,18 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // Add cube
-      const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-      const material = new THREE.MeshNormalMaterial();
-      const cube = new THREE.Mesh(geometry, material);
+      // Cube
+      cube = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.3, 0.3),
+        new THREE.MeshNormalMaterial()
+      );
       scene.add(cube);
 
-      // Animate
       renderer.setAnimationLoop(() => {
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.01;
         renderer.render(scene, camera);
       });
 
-      // Manual XR button
+      // XR button
       const button = document.getElementById('enterXR');
       button.addEventListener('click', async () => {
         if (navigator.xr) {
@@ -75,15 +81,44 @@
         }
       });
 
-      // Webcam access
+      // Webcam + MediaPipe
       const video = document.getElementById('video');
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          video.srcObject = stream;
-        })
-        .catch(err => {
-          console.error('Webcam access failed:', err);
-        });
+      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+        video.srcObject = stream;
+      });
+
+      const hands = new Hands({
+        locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+      });
+
+      hands.onResults(results => {
+        if (results.multiHandLandmarks.length > 0) {
+          const landmarks = results.multiHandLandmarks[0];
+          const indexTip = landmarks[8]; // Index fingertip
+
+          // Map normalized coordinates to scene
+          const x = (indexTip.x - 0.5) * 4;
+          const y = -(indexTip.y - 0.5) * 3;
+          cube.position.x = x;
+          cube.position.y = y;
+        }
+      });
+
+      const cameraFeed = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 640,
+        height: 480
+      });
+      cameraFeed.start();
     });
   </script>
 </body>
