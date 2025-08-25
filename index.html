@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR Hand Tracking with Back Camera</title>
+  <title>AR Grab Cube with Hand Tracking</title>
   <style>
     body { margin: 0; overflow: hidden; }
     #enterAR {
@@ -31,45 +31,41 @@
   <button id="enterAR">Enter AR</button>
   <video id="video" autoplay playsinline></video>
 
-  <!-- Three.js -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <!-- MediaPipe Hands -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
     let cube, renderer, scene, camera;
+    let isGrabbing = false;
 
     window.addEventListener('DOMContentLoaded', () => {
-      // Scene setup
       scene = new THREE.Scene();
-
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.z = 2;
+      camera.position.z = 0;
 
       renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.setClearColor(0x000000, 0); // transparent background
+      renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
 
-      // Cube
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial()
       );
+      cube.position.set(0, 0, -0.5);
       scene.add(cube);
 
       renderer.setAnimationLoop(() => {
         renderer.render(scene, camera);
       });
 
-      // AR Button
       document.getElementById('enterAR').addEventListener('click', async () => {
         if (navigator.xr) {
           try {
             const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local-floor', 'hit-test']
+              requiredFeatures: ['local-floor']
             });
             renderer.xr.setSession(session);
           } catch (err) {
@@ -80,7 +76,6 @@
         }
       });
 
-      // Back camera
       const video = document.getElementById('video');
       navigator.mediaDevices.getUserMedia({
         video: { facingMode: { exact: "environment" } }
@@ -90,7 +85,6 @@
         console.error('Back camera access failed:', err);
       });
 
-      // MediaPipe Hands
       const hands = new Hands({
         locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
@@ -104,11 +98,26 @@
 
       hands.onResults(results => {
         if (results.multiHandLandmarks.length > 0) {
-          const indexTip = results.multiHandLandmarks[0][8];
-          const x = (indexTip.x - 0.5) * 4;
-          const y = -(indexTip.y - 0.5) * 3;
-          cube.position.x = x;
-          cube.position.y = y;
+          const landmarks = results.multiHandLandmarks[0];
+          const indexTip = landmarks[8];
+          const thumbTip = landmarks[4];
+
+          const dx = indexTip.x - thumbTip.x;
+          const dy = indexTip.y - thumbTip.y;
+          const pinchDistance = Math.sqrt(dx * dx + dy * dy);
+
+          if (pinchDistance < 0.05) {
+            isGrabbing = true;
+          } else {
+            isGrabbing = false;
+          }
+
+          if (isGrabbing) {
+            const x = (indexTip.x - 0.5) * 2;
+            const y = -(indexTip.y - 0.5) * 2;
+            cube.position.x = x;
+            cube.position.y = y;
+          }
         }
       });
 
