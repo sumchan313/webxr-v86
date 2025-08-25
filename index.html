@@ -225,12 +225,17 @@
       });
 
       function renderStereo() {
-        renderer.setScissorTest(true);
+  renderer.setScissorTest(true);
 
-        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.render(scene, leftCamera);
+  // Left eye
+  renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+  renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+  renderer.render(scene, leftCamera);
 
-        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.render(scene, right
+  // Right eye
+  renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+  renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+  renderer.render(scene, rightCamera);
+
+  renderer.setScissorTest(false);
+}
