@@ -96,8 +96,8 @@
 
       document.getElementById('enterARVR').addEventListener('click', async () => {
         isARVR = true;
-        scene.background = new THREE.Color(0x202020);
-        renderer.setClearColor(0x202020, 1);
+        scene.background = null;
+        renderer.setClearColor(0x000000, 0); // fully transparent
         if (navigator.xr) {
           try {
             const session = await navigator.xr.requestSession('immersive-ar', {
@@ -172,3 +172,4 @@
   </script>
 </body>
 </html>
+
