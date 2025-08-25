@@ -20,7 +20,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/VRButton.js"></script>
 
   <script>
     // Request rear camera
@@ -39,7 +38,17 @@
     const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('xr-canvas'), alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
-    document.body.appendChild(VRButton.createButton(renderer));
+
+    // Request inline XR session (WebXR Viewer compatible)
+    if (navigator.xr) {
+      navigator.xr.requestSession("inline").then(session => {
+        renderer.xr.setSession(session);
+      }).catch(err => {
+        console.warn("WebXR session failed:", err);
+      });
+    } else {
+      console.warn("WebXR not supported");
+    }
 
     // Output text
     const output = document.getElementById('output');
