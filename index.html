@@ -2,183 +2,94 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR + LVR + VR Hand Tracking</title>
+  <title>Cardboard Stereo AR</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
-    #enterAR, #enterLVR, #enterARVR {
+    #enterAR {
       position: absolute;
       top: 20px;
-      left: 20px;
-      z-index: 10;
-      padding: 10px 20px;
-      font-size: 16px;
-      background: black;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      background: #0a84ff;
       color: white;
+      font-size: 16px;
       border: none;
+      border-radius: 8px;
       cursor: pointer;
-      margin-right: 10px;
-    }
-    #enterLVR { left: 140px; }
-    #enterARVR { left: 260px; }
-    #video {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      width: 200px;
-      border: 2px solid black;
       z-index: 10;
     }
   </style>
 </head>
 <body>
   <button id="enterAR">Enter AR</button>
-  <button id="enterLVR">Enter LVR</button>
-  <button id="enterARVR">Enter VR</button>
-  <video id="video" autoplay playsinline muted></video>
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.152.2';
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-  <script>
-    let cube, renderer, scene, camera;
+    let renderer, scene;
     let leftCamera, rightCamera;
-    let isLVR = false;
-    let isStereoAR = false;
+    let cube;
 
-    window.addEventListener('DOMContentLoaded', () => {
+    init();
+
+    function init() {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setClearColor(0x000000, 1); // Hide camera feed
+      document.body.appendChild(renderer.domElement);
+
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x000000);
 
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.z = 2;
-
-      renderer = new THREE.WebGLRenderer({ alpha: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      renderer.setClearColor(0x000000, 1);
-      document.body.appendChild(renderer.domElement);
-
-      cube = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 0.2, 0.2),
-        new THREE.MeshNormalMaterial()
-      );
+      // Cube
+      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+      const material = new THREE.MeshStandardMaterial({ color: 0xff4444 });
+      cube = new THREE.Mesh(geometry, material);
       cube.position.set(0, 0, -1);
       scene.add(cube);
 
-      renderer.setAnimationLoop(() => {
-        if (isLVR || isStereoAR) {
-          renderStereo();
-        } else {
-          renderer.render(scene, camera);
-        }
-      });
+      // Light
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(1, 1, 1);
+      scene.add(light);
 
-      document.getElementById('enterAR').addEventListener('click', async () => {
-        if (navigator.xr) {
-          try {
-            const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local-floor', 'hit-test']
-            });
-            renderer.xr.setSession(session);
-          } catch (err) {
-            console.error('AR session failed:', err);
-          }
-        } else {
-          alert('WebXR AR not supported');
-        }
-      });
+      // Stereo cameras
+      leftCamera = new THREE.PerspectiveCamera(75, 0.5 * window.innerWidth / window.innerHeight, 0.01, 100);
+      rightCamera = new THREE.PerspectiveCamera(75, 0.5 * window.innerWidth / window.innerHeight, 0.01, 100);
+      leftCamera.position.set(-0.03, 0, 0);
+      rightCamera.position.set(0.03, 0, 0);
 
-      document.getElementById('enterLVR').addEventListener('click', () => {
-        isLVR = true;
-        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        leftCamera.position.set(-0.03, 0, 2);
-        rightCamera.position.set(0.03, 0, 2);
-      });
+      document.getElementById('enterAR').addEventListener('click', startAR);
+    }
 
-      document.getElementById('enterARVR').addEventListener('click', async () => {
-        isStereoAR = true;
-
-        scene.background = new THREE.Color(0x000000);
-        renderer.setClearColor(0x000000, 1);
-
-        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        leftCamera.position.set(-0.03, 0, 0);
-        rightCamera.position.set(0.03, 0, 0);
-
-        if (navigator.xr) {
-          try {
-            const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local']
-            });
-            renderer.xr.setSession(session);
-          } catch (err) {
-            console.error('AR-as-VR session failed:', err);
-          }
-        } else {
-          alert('WebXR not supported');
-        }
-      });
-
-      function renderStereo() {
-        renderer.setScissorTest(true);
-
-        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.render(scene, leftCamera);
-
-        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-        renderer.render(scene, rightCamera);
-
-        renderer.setScissorTest(false);
+    async function startAR() {
+      if (navigator.xr) {
+        const session = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local']
+        });
+        renderer.xr.setSession(session);
+        renderer.setAnimationLoop(renderStereo);
+      } else {
+        alert('WebXR not supported on this device.');
       }
+    }
 
-      const video = document.getElementById('video');
-      navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      }).then(stream => {
-        video.srcObject = stream;
-      }).catch(err => {
-        console.error('Wide-view camera access failed:', err);
-      });
+    function renderStereo() {
+      renderer.setScissorTest(true);
 
-      const hands = new Hands({
-        locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-      });
+      // Left eye
+      renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.render(scene, leftCamera);
 
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.7
-      });
+      // Right eye
+      renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+      renderer.render(scene, rightCamera);
 
-      hands.onResults(results => {
-        if (results.multiHandLandmarks.length > 0) {
-          const indexTip = results.multiHandLandmarks[0][8];
-          const x = (indexTip.x - 0.5) * 4;
-          const y = -(indexTip.y - 0.5) * 3;
-          cube.position.x = x;
-          cube.position.y = y;
-        }
-      });
-
-      const cameraFeed = new Camera(video, {
-        onFrame: async () => {
-          await hands.send({ image: video });
-        },
-        width: 640,
-        height: 480
-      });
-      cameraFeed.start();
-    });
+      renderer.setScissorTest(false);
+    }
   </script>
 </body>
 </html>
