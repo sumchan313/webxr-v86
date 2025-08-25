@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Immersive XR with Hand Tracking</title>
+  <title>AR Hand Tracking with Back Camera</title>
   <style>
-    body { margin: 0; overflow: hidden; background: white; }
-    #enterXR {
+    body { margin: 0; overflow: hidden; }
+    #enterAR {
       position: absolute;
       top: 20px;
       left: 20px;
@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <button id="enterXR">Enter XR</button>
+  <button id="enterAR">Enter AR</button>
   <video id="video" autoplay playsinline></video>
 
   <!-- Three.js -->
@@ -38,24 +38,24 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
-    let cube;
+    let cube, renderer, scene, camera;
 
     window.addEventListener('DOMContentLoaded', () => {
-      // Three.js scene
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color('white');
+      // Scene setup
+      scene = new THREE.Scene();
 
-      const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
       camera.position.z = 2;
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
+      renderer.setClearColor(0x000000, 0); // transparent background
       document.body.appendChild(renderer.domElement);
 
       // Cube
       cube = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, 0.3, 0.3),
+        new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial()
       );
       scene.add(cube);
@@ -64,29 +64,33 @@
         renderer.render(scene, camera);
       });
 
-      // XR button
-      const button = document.getElementById('enterXR');
-      button.addEventListener('click', async () => {
+      // AR Button
+      document.getElementById('enterAR').addEventListener('click', async () => {
         if (navigator.xr) {
           try {
-            const session = await navigator.xr.requestSession('immersive-vr', {
-              optionalFeatures: ['local-floor', 'bounded-floor']
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local-floor', 'hit-test']
             });
             renderer.xr.setSession(session);
           } catch (err) {
-            console.error('XR session failed:', err);
+            console.error('AR session failed:', err);
           }
         } else {
-          alert('WebXR not supported');
+          alert('WebXR AR not supported');
         }
       });
 
-      // Webcam + MediaPipe
+      // Back camera
       const video = document.getElementById('video');
-      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: "environment" } }
+      }).then(stream => {
         video.srcObject = stream;
+      }).catch(err => {
+        console.error('Back camera access failed:', err);
       });
 
+      // MediaPipe Hands
       const hands = new Hands({
         locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
@@ -100,10 +104,7 @@
 
       hands.onResults(results => {
         if (results.multiHandLandmarks.length > 0) {
-          const landmarks = results.multiHandLandmarks[0];
-          const indexTip = landmarks[8]; // Index fingertip
-
-          // Map normalized coordinates to scene
+          const indexTip = results.multiHandLandmarks[0][8];
           const x = (indexTip.x - 0.5) * 4;
           const y = -(indexTip.y - 0.5) * 3;
           cube.position.x = x;
