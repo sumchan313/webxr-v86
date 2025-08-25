@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR Cube Grab with MediaPipe Hands</title>
+  <title>AR Cube Grab Anywhere</title>
   <style>
     body { margin: 0; overflow: hidden; }
     #enterAR {
@@ -39,7 +39,7 @@
     let isGrabbing = false;
 
     window.addEventListener('DOMContentLoaded', () => {
-      // THREE.js scene setup
+      // THREE.js setup
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
       camera.position.z = 2;
@@ -50,7 +50,7 @@
       renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
 
-      // Cube object
+      // Cube
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial()
@@ -117,21 +117,10 @@
           const z = -0.5;
 
           const pinchThreshold = 0.05;
-          const grabRadius = 0.3;
 
           if (pinchDistance < pinchThreshold) {
-            const distToCube = Math.hypot(
-              cube.position.x - x,
-              cube.position.y - y
-            );
-
-            if (!isGrabbing && distToCube < grabRadius) {
-              isGrabbing = true;
-            }
-
-            if (isGrabbing) {
-              cube.position.set(x, y, z);
-            }
+            isGrabbing = true;
+            cube.position.set(x, y, z);
           } else {
             isGrabbing = false;
           }
