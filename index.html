@@ -202,8 +202,9 @@
       document.getElementById('enterARVR').addEventListener('click', async () => {
         isStereoAR = true;
 
-        scene.background = new THREE.Color(0x000000);
-        renderer.setClearColor(0x000000, 1);
+        scene.background = null; // No background color
+        renderer = new THREE.WebGLRenderer({ alpha: true }); // Enable alpha channel
+        renderer.setClearColor(0x000000, 0); // 0 alpha = fully transparent
 
         leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
@@ -284,4 +285,5 @@
   </script>
 </body>
 </html>
+
 
