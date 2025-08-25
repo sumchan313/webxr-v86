@@ -1,135 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>WebXR Vision Keyboard</title>
+  <meta charset="UTF-8">
+  <title>Hand Tracking Block Grab</title>
   <style>
-    body, html { margin: 0; overflow: hidden; background: black; }
-    canvas, video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    #webcam { z-index: -1; object-fit: cover; }
-    #output { position: absolute; bottom: 10px; left: 10px; color: lime; font-family: monospace; font-size: 20px; }
-    #enter-xr {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 10;
-      padding: 10px 20px;
-      font-size: 16px;
-      background: lime;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
+    canvas { border: 1px solid black; }
+    #video { display: none; }
   </style>
 </head>
 <body>
-  <video id="webcam" autoplay muted playsinline></video>
-  <canvas id="xr-canvas"></canvas>
-  <div id="output">Typed: </div>
-  <button id="enter-xr">Enter XR</button>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
 
-  <!-- Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
   <script>
-    // Request rear camera
-    const webcam = document.getElementById('webcam');
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } }
-    }).then(stream => {
-      webcam.srcObject = stream;
-    }).catch(err => {
-      console.error("Camera access error:", err);
-    });
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const video = document.getElementById('video');
 
-    // Three.js setup
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('xr-canvas'), alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true;
+    let blocks = [{x: 100, y: 100, size: 50}, {x: 300, y: 200, size: 50}];
+    let grabbedBlock = null;
 
-    // Custom XR button
-    const xrButton = document.getElementById('enter-xr');
-    xrButton.addEventListener('click', () => {
-      if (navigator.xr) {
-        navigator.xr.requestSession("inline").then(session => {
-          renderer.xr.setSession(session);
-          xrButton.style.display = "none";
-        }).catch(err => {
-          console.warn("WebXR session failed:", err);
-        });
-      } else {
-        alert("WebXR not supported on this device.");
+    function drawBlocks() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      blocks.forEach(block => {
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(block.x, block.y, block.size, block.size);
+      });
+    }
+
+    function isPinching(landmarks) {
+      const thumbTip = landmarks[4];
+      const indexTip = landmarks[8];
+      const dx = thumbTip.x - indexTip.x;
+      const dy = thumbTip.y - indexTip.y;
+      return Math.sqrt(dx*dx + dy*dy) < 0.05;
+    }
+
+    function getCursor(landmarks) {
+      const tip = landmarks[8];
+      return { x: tip.x * canvas.width, y: tip.y * canvas.height };
+    }
+
+    const hands = new Hands({locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7});
+    hands.onResults(results => {
+      drawBlocks();
+      if (results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        const cursor = getCursor(landmarks);
+
+        if (isPinching(landmarks)) {
+          if (!grabbedBlock) {
+            grabbedBlock = blocks.find(b =>
+              cursor.x > b.x && cursor.x < b.x + b.size &&
+              cursor.y > b.y && cursor.y < b.y + b.size
+            );
+          }
+          if (grabbedBlock) {
+            grabbedBlock.x = cursor.x - grabbedBlock.size / 2;
+            grabbedBlock.y = cursor.y - grabbedBlock.size / 2;
+          }
+        } else {
+          grabbedBlock = null;
+        }
+
+        ctx.beginPath();
+        ctx.arc(cursor.x, cursor.y, 10, 0, 2 * Math.PI);
+        ctx.fillStyle = 'red';
+        ctx.fill();
       }
     });
 
-    // Output text
-    const output = document.getElementById('output');
-    let typedText = "";
-
-    // Create keyboard keys
-    const keys = "QWERTYUIOPASDFGHJKLZXCVBNM".split("");
-    const keyMeshes = [];
-    keys.forEach((char, i) => {
-      const geo = new THREE.PlaneGeometry(0.1, 0.1);
-      const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set((i % 10 - 5) * 0.12, Math.floor(i / 10) * -0.15, -1.5);
-      mesh.userData.char = char;
-      scene.add(mesh);
-      keyMeshes.push(mesh);
-    });
-
-    // Hand tracking
-    const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
-
-    hands.onResults(results => {
-      if (!results.multiHandLandmarks.length) return;
-      const indexTip = results.multiHandLandmarks[0][8];
-      const x = (indexTip.x - 0.5) * 2;
-      const y = -(indexTip.y - 0.5) * 2;
-
-      keyMeshes.forEach(mesh => {
-        const dx = mesh.position.x - x;
-        const dy = mesh.position.y - y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 0.1) {
-          mesh.material.color.set(0xff0000);
-          if (!mesh.userData.pressed) {
-            typedText += mesh.userData.char;
-            output.textContent = "Typed: " + typedText;
-            mesh.userData.pressed = true;
-            setTimeout(() => {
-              mesh.material.color.set(0x00ffcc);
-              mesh.userData.pressed = false;
-            }, 300);
-          }
-        }
-      });
-    });
-
-    // Start camera feed
-    const cameraFeed = new Camera(webcam, {
-      onFrame: async () => await hands.send({ image: webcam }),
+    const camera = new Camera(video, {
+      onFrame: async () => await hands.send({image: video}),
       width: 640,
       height: 480
     });
-    cameraFeed.start();
-
-    // Render loop
-    renderer.setAnimationLoop(() => {
-      renderer.render(scene, camera);
-    });
+    camera.start();
   </script>
 </body>
 </html>
