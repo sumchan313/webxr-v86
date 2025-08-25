@@ -110,124 +110,60 @@
         }
       });
 
-      document.getElementById('uploadOBJ').addEventListener('change', event => {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = e => {
-          const loader = new THREE.OBJLoader();
-          const object = loader.parse(e.target.result);
-          object.scale.set(0.5, 0.5, 0.5);
-          object.position.set(0, 0, -1);
-          if (currentModel) scene.remove(currentModel);
-          currentModel = object;
-          scene.add(object);
-        };
-        reader.readAsText(file);
+      document.getElementById('enterAR').addEventListener('click', async () => {
+        if (!navigator.xr) {
+          alert('WebXR not supported in this browser.');
+          return;
+        }
+
+        if (!window.isSecureContext) {
+          alert('WebXR requires HTTPS. Please host this page securely.');
+          return;
+        }
+
+        try {
+          const session = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['local-floor', 'hit-test']
+          });
+          renderer.xr.setSession(session);
+          console.log('Immersive AR session started');
+        } catch (err) {
+          console.error('Failed to start AR session:', err);
+          alert('AR session could not be started. Check device compatibility and permissions.');
+        }
       });
 
-      document.getElementById('handOverlayMode').addEventListener('click', () => {
-        handOverlayMode = !handOverlayMode;
-        document.getElementById('handOverlayMode').style.background = handOverlayMode ? '#ff1493' : 'pink';
+      document.getElementById('enterLVR').addEventListener('click', () => {
+        isLVR = true;
+        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        leftCamera.position.set(-0.03, 0, 2);
+        rightCamera.position.set(0.03, 0, 2);
       });
 
-      document.getElementById('startCamera').addEventListener('click', () => {
-        const video = document.getElementById('video');
-        navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: 1920, height: 1080 }
-        }).then(stream => {
-          video.srcObject = stream;
-        }).catch(err => {
-          alert('Camera access denied: ' + err.message);
-        });
+      document.getElementById('enterARVR').addEventListener('click', async () => {
+        isStereoAR = true;
+        scene.background = new THREE.Color(0x000000);
+        renderer.setClearColor(0x000000, 1);
 
-        const hands = new Hands({
-          locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
+        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        leftCamera.position.set(-0.03, 0, 0);
+        rightCamera.position.set(0.03, 0, 0);
 
-        hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.7,
-          minTrackingConfidence: 0.7
-        });
-
-        hands.onResults(results => {
-          if (results.multiHandLandmarks.length > 0) {
-            const landmarks = results.multiHandLandmarks[0];
-
-            fingertips.forEach((i, idx) => {
-              const tip = landmarks[i];
-              const x = (tip.x - 0.5) * 4;
-              const y = -(tip.y - 0.5) * 3;
-              fingertipMeshes[idx].position.set(x, y, -1);
+        if (navigator.xr) {
+          try {
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local']
             });
-
-            const thumbTip = landmarks[4];
-            const indexTip = landmarks[8];
-            const pinkyTip = landmarks[20];
-            const palm = landmarks[9];
-            const wrist = landmarks[0];
-            const dx = indexTip.x - thumbTip.x;
-            const dy = indexTip.y - thumbTip.y;
-            const pinchDistance = Math.sqrt(dx * dx + dy * dy);
-            const z = -1 + palm.z * 2;
-
-            const extendedFingers = fingertips.filter(i => landmarks[i].y < landmarks[i - 2].y);
-            const isFist = extendedFingers.length === 0;
-            const isOpenHand = extendedFingers.length >= 4;
-            const isPinch = pinchDistance < 0.05;
-
-            if (isFist) {
-              cube.scale.setScalar(0.5);
-            } else if (isOpenHand) {
-              cube.material.color.set(0xff69b4);
-              cube.material.emissive.set(0xff69b4);
-            } else if (isPinch) {
-              cube.scale.setScalar(1.5);
-            }
-
-            if (extendedFingers.length === 1 && extendedFingers[0] === 8) {
-              const sphere = new THREE.Mesh(
-                new THREE.SphereGeometry(0.05, 16, 16),
-                new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4 })
-              );
-              sphere.position.set(cube.position.x, cube.position.y, cube.position.z - 0.5);
-              scene.add(sphere);
-            }
-
-            if (handOverlayMode) {
-              const x = (palm.x - 0.5) * 4;
-              const y = -(palm.y - 0.5) * 3;
-              cube.position.set(x, y, z);
-
-              const dxPalm = palm.x - wrist.x;
-              const dyPalm = palm.y - wrist.y;
-              const angle = Math.atan2(dyPalm, dxPalm);
-              cube.rotation.z = angle;
-
-              const spread = Math.hypot(thumbTip.x - pinkyTip.x, thumbTip.y - pinkyTip.y);
-              cube.scale.setScalar(spread * 5);
-
-              const maxSpread = 0.3;
-              const intensity = Math.min(spread / maxSpread, 1);
-              cube.material.color.setRGB(1 - intensity, intensity, 0.5);
-
-              const depthFade = Math.max(0, Math.min(1, 1 - Math.abs(z) / 2));
-              cube.material.opacity = depthFade;
-              cube.material.transparent = true;
-            }
+            renderer.xr.setSession(session);
+          } catch (err) {
+            console.error('AR-as-VR session failed:', err);
+            alert('AR-as-VR session could not be started.');
           }
-        });
-
-        const cameraFeed = new Camera(video, {
-          onFrame: async () => {
-            await hands.send({ image: video });
-          },
-          width: 640,
-          height: 480
-        });
-        cameraFeed.start();
+        } else {
+          alert('WebXR not supported');
+        }
       });
 
       function renderStereo() {
