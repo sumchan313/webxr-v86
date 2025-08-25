@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>AR + LVR + VR Hand Tracking</title>
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
+    body { margin: 0; overflow: hidden; }
     #enterAR, #enterLVR, #enterARVR {
       position: absolute;
       top: 20px;
@@ -44,30 +44,27 @@
     let cube, renderer, scene, camera;
     let leftCamera, rightCamera;
     let isLVR = false;
-    let isStereoAR = false;
+    let isARVR = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x000000);
-
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
       camera.position.z = 2;
 
       renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.setClearColor(0x000000, 1);
+      renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
 
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial()
       );
-      cube.position.set(0, 0, -1);
       scene.add(cube);
 
       renderer.setAnimationLoop(() => {
-        if (isLVR || isStereoAR) {
+        if (isLVR) {
           renderStereo();
         } else {
           renderer.render(scene, camera);
@@ -98,27 +95,21 @@
       });
 
       document.getElementById('enterARVR').addEventListener('click', async () => {
-        isStereoAR = true;
-
-        scene.background = new THREE.Color(0x000000);
-        renderer.setClearColor(0x000000, 1);
-
-        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        leftCamera.position.set(-0.03, 0, 0);
-        rightCamera.position.set(0.03, 0, 0);
+        isARVR = true;
+        scene.background = null;
+        renderer.setClearColor(0x000000, 0);
 
         if (navigator.xr) {
           try {
-            const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local']
+            const session = await navigator.xr.requestSession('immersive-vr', {
+              requiredFeatures: ['local-floor']
             });
             renderer.xr.setSession(session);
           } catch (err) {
-            console.error('AR-as-VR session failed:', err);
+            console.error('VR session failed:', err);
           }
         } else {
-          alert('WebXR not supported');
+          alert('WebXR VR not supported');
         }
       });
 
