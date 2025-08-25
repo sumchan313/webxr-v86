@@ -92,14 +92,14 @@
       });
 
       document.getElementById('enterAR').addEventListener('click', async () => {
-        if (!navigator.xr) {
-          alert('WebXR AR not supported');
+        if (!navigator.xr || !navigator.xr.isSessionSupported) {
+          alert('WebXR not available');
           return;
         }
 
         const supported = await navigator.xr.isSessionSupported('immersive-ar');
         if (!supported) {
-          alert('AR session not supported on this device/browser');
+          alert('AR not supported on this device/browser');
           return;
         }
 
@@ -133,6 +133,7 @@
           });
         } catch (err) {
           console.error('AR session failed:', err);
+          alert('AR session failed: ' + err.message);
         }
       });
 
