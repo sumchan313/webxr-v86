@@ -2,20 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Google Cardboard VR Cube Grab</title>
+  <title>AR + LVR Hand Tracking</title>
   <style>
     body { margin: 0; overflow: hidden; }
+    #enterAR, #enterLVR {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: black;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    #enterLVR {
+      left: 140px;
+    }
     #video {
       position: absolute;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      pointer-events: none;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      border: 2px solid black;
+      z-index: 10;
     }
-    canvas { display: block; }
   </style>
 </head>
 <body>
+  <button id="enterAR">Enter AR</button>
+  <button id="enterLVR">Enter LVR</button>
   <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
@@ -23,64 +41,85 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
-    let scene, cube, renderer;
+    let cube, renderer, scene, camera;
     let leftCamera, rightCamera;
-    let isGrabbing = false;
+    let isLVR = false;
 
     window.addEventListener('DOMContentLoaded', () => {
-      // Scene setup
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x202020);
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
+      camera.position.z = 2;
 
-      const aspect = window.innerWidth / 2 / window.innerHeight;
-      leftCamera = new THREE.PerspectiveCamera(70, aspect, 0.01, 100);
-      rightCamera = new THREE.PerspectiveCamera(70, aspect, 0.01, 100);
-      leftCamera.position.z = 2;
-      rightCamera.position.z = 2;
-
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
 
-      // Cube
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial()
       );
-      cube.position.set(0, 0, -0.5);
       scene.add(cube);
 
-      // Render loop: split screen
+      renderer.setAnimationLoop(() => {
+        if (isLVR) {
+          renderStereo();
+        } else {
+          renderer.render(scene, camera);
+        }
+      });
+
+      document.getElementById('enterAR').addEventListener('click', async () => {
+        if (navigator.xr) {
+          try {
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local-floor', 'hit-test']
+            });
+            renderer.xr.setSession(session);
+          } catch (err) {
+            console.error('AR session failed:', err);
+          }
+        } else {
+          alert('WebXR AR not supported');
+        }
+      });
+
+      document.getElementById('enterLVR').addEventListener('click', () => {
+        isLVR = true;
+        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        leftCamera.position.z = 2;
+        rightCamera.position.z = 2;
+      });
+
       function renderStereo() {
         renderer.setScissorTest(true);
 
-        // Left eye
         renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
         renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
         renderer.render(scene, leftCamera);
 
-        // Right eye
         renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
         renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
         renderer.render(scene, rightCamera);
 
         renderer.setScissorTest(false);
-        requestAnimationFrame(renderStereo);
       }
-      renderStereo();
 
-      // Camera feed for MediaPipe
       const video = document.getElementById('video');
       navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
       }).then(stream => {
         video.srcObject = stream;
-        console.log("✅ Camera stream started");
       }).catch(err => {
-        console.error("❌ Camera access failed:", err);
+        console.error('Wide-view camera access failed:', err);
       });
 
-      // MediaPipe Hands
       const hands = new Hands({
         locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
@@ -94,27 +133,11 @@
 
       hands.onResults(results => {
         if (results.multiHandLandmarks.length > 0) {
-          const landmarks = results.multiHandLandmarks[0];
-          const indexTip = landmarks[8];
-          const thumbTip = landmarks[4];
-
-          const pinchDistance = Math.hypot(
-            indexTip.x - thumbTip.x,
-            indexTip.y - thumbTip.y
-          );
-
-          const x = (indexTip.x - 0.5) * 2;
-          const y = -(indexTip.y - 0.5) * 2;
-          const z = -0.5;
-
-          const pinchThreshold = 0.05;
-
-          if (pinchDistance < pinchThreshold) {
-            isGrabbing = true;
-            cube.position.set(x, y, z);
-          } else {
-            isGrabbing = false;
-          }
+          const indexTip = results.multiHandLandmarks[0][8];
+          const x = (indexTip.x - 0.5) * 4;
+          const y = -(indexTip.y - 0.5) * 3;
+          cube.position.x = x;
+          cube.position.y = y;
         }
       });
 
