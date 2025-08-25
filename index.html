@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR + LVR Hand Tracking</title>
+  <title>AR + LVR + ARVR Hand Tracking</title>
   <style>
     body { margin: 0; overflow: hidden; }
-    #enterAR, #enterLVR {
+    #enterAR, #enterLVR, #enterARVR {
       position: absolute;
       top: 20px;
       left: 20px;
@@ -18,9 +18,8 @@
       cursor: pointer;
       margin-right: 10px;
     }
-    #enterLVR {
-      left: 140px;
-    }
+    #enterLVR { left: 140px; }
+    #enterARVR { left: 260px; }
     #video {
       position: absolute;
       bottom: 20px;
@@ -34,6 +33,7 @@
 <body>
   <button id="enterAR">Enter AR</button>
   <button id="enterLVR">Enter LVR</button>
+  <button id="enterARVR">Enter AR-VR</button>
   <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
@@ -44,6 +44,7 @@
     let cube, renderer, scene, camera;
     let leftCamera, rightCamera;
     let isLVR = false;
+    let isARVR = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
@@ -91,6 +92,24 @@
         rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         leftCamera.position.z = 2;
         rightCamera.position.z = 2;
+      });
+
+      document.getElementById('enterARVR').addEventListener('click', async () => {
+        isARVR = true;
+        scene.background = new THREE.Color(0x202020);
+        renderer.setClearColor(0x202020, 1);
+        if (navigator.xr) {
+          try {
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local-floor']
+            });
+            renderer.xr.setSession(session);
+          } catch (err) {
+            console.error('AR-VR session failed:', err);
+          }
+        } else {
+          alert('WebXR not supported');
+        }
       });
 
       function renderStereo() {
