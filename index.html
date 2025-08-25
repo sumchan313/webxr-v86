@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>AR + LVR + VR Hand Tracking</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; background: black; }
     #enterAR, #enterLVR, #enterARVR {
       position: absolute;
       top: 20px;
@@ -45,26 +45,30 @@
     let leftCamera, rightCamera;
     let isLVR = false;
     let isARVR = false;
+    let isStereoAR = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000);
+
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
       camera.position.z = 2;
 
       renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.setClearColor(0x000000, 0);
+      renderer.setClearColor(0x000000, 1);
       document.body.appendChild(renderer.domElement);
 
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial()
       );
+      cube.position.set(0, 0, -1);
       scene.add(cube);
 
       renderer.setAnimationLoop(() => {
-        if (isLVR) {
+        if (isLVR || isStereoAR) {
           renderStereo();
         } else {
           renderer.render(scene, camera);
@@ -75,9 +79,15 @@
         if (navigator.xr) {
           try {
             const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local-floor', 'hit-test']
+              requiredFeatures: ['local']
             });
             renderer.xr.setSession(session);
+            isStereoAR = true;
+
+            leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+            rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+            leftCamera.position.set(-0.03, 0, 0);
+            rightCamera.position.set(0.03, 0, 0);
           } catch (err) {
             console.error('AR session failed:', err);
           }
@@ -173,4 +183,3 @@
   </script>
 </body>
 </html>
-
