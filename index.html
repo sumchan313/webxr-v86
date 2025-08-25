@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR + LVR + VR Hand Tracking with Camera Overlay</title>
+  <title>AR + LVR + VR Hand Tracking with Camera Overlay + OBJ</title>
   <style>
     body { margin: 0; overflow: hidden; }
     #enterAR, #enterLVR, #enterARVR {
@@ -44,6 +44,7 @@
   <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/OBJLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
@@ -52,6 +53,7 @@
     let leftCamera, rightCamera;
     let isLVR = false;
     let isARVR = false;
+    let t = 0;
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
@@ -68,10 +70,21 @@
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
         new THREE.MeshNormalMaterial({ transparent: true, opacity: 0.8 })
       );
-      cube.position.set(0, 0, -0.5);
+      cube.position.set(0, 0.5, -1);
       scene.add(cube);
 
+      // Load OBJ model
+      const loader = new THREE.OBJLoader();
+      loader.load('https://threejs.org/examples/models/obj/male02/male02.obj', obj => {
+        obj.scale.set(0.01, 0.01, 0.01);
+        obj.position.set(0.5, -0.5, -1);
+        scene.add(obj);
+      });
+
       renderer.setAnimationLoop(() => {
+        t += 0.01;
+        cube.position.y = 0.5 + Math.sin(t) * 0.05;
+
         if (isLVR) {
           renderStereo();
         } else {
@@ -161,11 +174,26 @@
 
       hands.onResults(results => {
         if (results.multiHandLandmarks.length > 0) {
-          const indexTip = results.multiHandLandmarks[0][8];
+          const landmarks = results.multiHandLandmarks[0];
+          const indexTip = landmarks[8];
+          const thumbTip = landmarks[4];
+
           const x = (indexTip.x - 0.5) * 4;
           const y = -(indexTip.y - 0.5) * 3;
           cube.position.x = x;
-          cube.position.y = y;
+
+          // Float baseline + finger tracking
+          cube.position.y = 0.5 + Math.sin(t) * 0.05 + y * 0.2;
+
+          // Pinch detection
+          const dx = indexTip.x - thumbTip.x;
+          const dy = indexTip.y - thumbTip.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance < 0.05) {
+            cube.scale.set(1.5, 1.5, 1.5);
+          } else {
+            cube.scale.set(1, 1, 1);
+          }
         }
       });
 
