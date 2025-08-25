@@ -44,7 +44,6 @@
     let cube, renderer, scene, camera;
     let leftCamera, rightCamera;
     let isLVR = false;
-    let isARVR = false;
     let isStereoAR = false;
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -79,15 +78,9 @@
         if (navigator.xr) {
           try {
             const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local']
+              requiredFeatures: ['local-floor', 'hit-test']
             });
             renderer.xr.setSession(session);
-            isStereoAR = true;
-
-            leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-            rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-            leftCamera.position.set(-0.03, 0, 0);
-            rightCamera.position.set(0.03, 0, 0);
           } catch (err) {
             console.error('AR session failed:', err);
           }
@@ -105,21 +98,27 @@
       });
 
       document.getElementById('enterARVR').addEventListener('click', async () => {
-        isARVR = true;
-        scene.background = null;
-        renderer.setClearColor(0x000000, 0);
+        isStereoAR = true;
+
+        scene.background = new THREE.Color(0x000000);
+        renderer.setClearColor(0x000000, 1);
+
+        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        leftCamera.position.set(-0.03, 0, 0);
+        rightCamera.position.set(0.03, 0, 0);
 
         if (navigator.xr) {
           try {
-            const session = await navigator.xr.requestSession('immersive-vr', {
-              requiredFeatures: ['local-floor']
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local']
             });
             renderer.xr.setSession(session);
           } catch (err) {
-            console.error('VR session failed:', err);
+            console.error('AR-as-VR session failed:', err);
           }
         } else {
-          alert('WebXR VR not supported');
+          alert('WebXR not supported');
         }
       });
 
