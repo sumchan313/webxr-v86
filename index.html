@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>AR + LVR + VR Hand Tracking</title>
+  <meta charset="UTF-8" />
+  <title>AR + LVR + VR Hand Playground</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
     button, input[type="file"] {
@@ -11,8 +11,8 @@
       z-index: 10;
       padding: 10px 20px;
       font-size: 16px;
-      background: black;
-      color: white;
+      background: pink;
+      color: black;
       border: none;
       cursor: pointer;
     }
@@ -26,7 +26,7 @@
       bottom: 20px;
       right: 20px;
       width: 200px;
-      border: 2px solid black;
+      border: 2px solid pink;
       z-index: 10;
     }
     canvas {
@@ -44,7 +44,7 @@
   <button id="enterLVR">Enter LVR</button>
   <button id="enterARVR">Enter VR</button>
   <button id="startCamera">Start Camera</button>
-  <input type="file" id="uploadOBJ" accept=".obj">
+  <input type="file" id="uploadOBJ" accept=".obj" />
   <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
@@ -76,21 +76,25 @@
 
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
-        new THREE.MeshNormalMaterial()
+        new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.5 })
       );
       cube.position.set(0, 0, -1);
       scene.add(cube);
 
+      const light = new THREE.PointLight(0xff69b4, 1, 10);
+      light.position.set(0, 1, 2);
+      scene.add(light);
+
       fingertips.forEach(() => {
         const mesh = new THREE.Mesh(
           new THREE.SphereGeometry(0.01, 8, 8),
-          new THREE.MeshBasicMaterial({ color: 0xff0000 })
+          new THREE.MeshBasicMaterial({ color: 0xff69b4 })
         );
         scene.add(mesh);
         fingertipMeshes.push(mesh);
       });
 
-      renderer.setAnimationLoop((timestamp, frame) => {
+      renderer.setAnimationLoop(() => {
         t += 0.01;
         cube.rotation.x += 0.01;
         cube.rotation.y += 0.01;
@@ -143,6 +147,7 @@
         hands.onResults(results => {
           if (results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0];
+
             fingertips.forEach((i, idx) => {
               const tip = landmarks[i];
               const x = (tip.x - 0.5) * 4;
@@ -155,7 +160,31 @@
             const dx = indexTip.x - thumbTip.x;
             const dy = indexTip.y - thumbTip.y;
             const pinchDistance = Math.sqrt(dx * dx + dy * dy);
-            cube.scale.setScalar(pinchDistance < 0.05 ? 1.5 : 1);
+
+            // Gesture classification
+            const extendedFingers = fingertips.filter(i => landmarks[i].y < landmarks[i - 2].y);
+            const isFist = extendedFingers.length === 0;
+            const isOpenHand = extendedFingers.length >= 4;
+            const isPinch = pinchDistance < 0.05;
+
+            if (isFist) {
+              cube.scale.setScalar(0.5);
+            } else if (isOpenHand) {
+              cube.material.color.set(0xff69b4);
+              cube.material.emissive.set(0xff69b4);
+            } else if (isPinch) {
+              cube.scale.setScalar(1.5);
+            }
+
+            // Pointing gesture (index extended only)
+            if (extendedFingers.length === 1 && extendedFingers[0] === 8) {
+              const sphere = new THREE.Mesh(
+                new THREE.SphereGeometry(0.05, 16, 16),
+                new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4 })
+              );
+              sphere.position.set(cube.position.x, cube.position.y, cube.position.z - 0.5);
+              scene.add(sphere);
+            }
           }
         });
 
@@ -199,6 +228,10 @@
 
       document.getElementById('enterARVR').addEventListener('click', async () => {
         isStereoAR = true;
+
+        scene.background = new THREE.Color(0x000000);
+        renderer.setClearColor(0x000000, 1);
+
         leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         leftCamera.position.set(-0.03, 0, 0);
