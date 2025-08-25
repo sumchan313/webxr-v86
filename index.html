@@ -5,7 +5,7 @@
   <title>AR + LVR + VR Hand Tracking with Camera Overlay + OBJ</title>
   <style>
     body { margin: 0; overflow: hidden; }
-    #enterAR, #enterLVR, #enterARVR {
+    #enterAR, #enterLVR, #enterARVR, #startCamera {
       position: absolute;
       top: 20px;
       left: 20px;
@@ -20,6 +20,7 @@
     }
     #enterLVR { left: 140px; }
     #enterARVR { left: 260px; }
+    #startCamera { left: 380px; }
     #video {
       position: absolute;
       top: 0;
@@ -41,6 +42,7 @@
   <button id="enterAR">Enter AR</button>
   <button id="enterLVR">Enter LVR</button>
   <button id="enterARVR">Enter VR</button>
+  <button id="startCamera">Start Camera</button>
   <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
@@ -54,6 +56,7 @@
     let isLVR = false;
     let isARVR = false;
     let t = 0;
+    let cameraFeedStarted = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
@@ -89,6 +92,62 @@
         } else {
           renderer.render(scene, camera);
         }
+      });
+
+      document.getElementById('startCamera').addEventListener('click', () => {
+        if (cameraFeedStarted) return;
+        cameraFeedStarted = true;
+
+        navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        }).then(stream => {
+          video.srcObject = stream;
+        }).catch(err => {
+          alert('Camera access denied: ' + err.message);
+          console.error('Camera error:', err);
+        });
+
+        const hands = new Hands({
+          locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.7,
+          minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(results => {
+          if (results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            const indexTip = landmarks[8];
+            const thumbTip = landmarks[4];
+
+            const x = (indexTip.x - 0.5) * 4;
+            const y = -(indexTip.y - 0.5) * 3;
+            cube.position.x = x;
+            cube.position.y = 0.5 + Math.sin(t) * 0.05 + y * 0.2;
+
+            const dx = indexTip.x - thumbTip.x;
+            const dy = indexTip.y - thumbTip.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            cube.scale.set(distance < 0.05 ? 1.5 : 1, distance < 0.05 ? 1.5 : 1, distance < 0.05 ? 1.5 : 1);
+          }
+        });
+
+        const cameraFeed = new Camera(video, {
+          onFrame: async () => {
+            await hands.send({ image: video });
+          },
+          width: 640,
+          height: 480
+        });
+        cameraFeed.start();
       });
 
       document.getElementById('enterAR').addEventListener('click', async () => {
@@ -177,57 +236,6 @@
 
         renderer.setScissorTest(false);
       }
-
-      const video = document.getElementById('video');
-      navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      }).then(stream => {
-        video.srcObject = stream;
-      }).catch(err => {
-        console.error('Wide-view camera access failed:', err);
-      });
-
-      const hands = new Hands({
-        locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-      });
-
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.7
-      });
-
-      hands.onResults(results => {
-        if (results.multiHandLandmarks.length > 0) {
-          const landmarks = results.multiHandLandmarks[0];
-          const indexTip = landmarks[8];
-          const thumbTip = landmarks[4];
-
-          const x = (indexTip.x - 0.5) * 4;
-          const y = -(indexTip.y - 0.5) * 3;
-          cube.position.x = x;
-          cube.position.y = 0.5 + Math.sin(t) * 0.05 + y * 0.2;
-
-          const dx = indexTip.x - thumbTip.x;
-          const dy = indexTip.y - thumbTip.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          cube.scale.set(distance < 0.05 ? 1.5 : 1, distance < 0.05 ? 1.5 : 1, distance < 0.05 ? 1.5 : 1);
-        }
-      });
-
-      const cameraFeed = new Camera(video, {
-        onFrame: async () => {
-          await hands.send({ image: video });
-        },
-        width: 640,
-        height: 480
-      });
-      cameraFeed.start();
     });
   </script>
 </body>
