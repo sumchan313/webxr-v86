@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR + LVR + VR Hand Tracking with Camera Overlay + OBJ</title>
+  <title>AR + LVR + VR Hand Tracking</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; background: black; }
     #enterAR, #enterLVR, #enterARVR, #startCamera {
       position: absolute;
       top: 20px;
       left: 20px;
-      z-index: 2;
+      z-index: 10;
       padding: 10px 20px;
       font-size: 16px;
       background: black;
@@ -23,18 +23,11 @@
     #startCamera { left: 380px; }
     #video {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      z-index: 0;
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      border: 2px solid black;
+      z-index: 10;
     }
   </style>
 </head>
@@ -42,11 +35,10 @@
   <button id="enterAR">Enter AR</button>
   <button id="enterLVR">Enter LVR</button>
   <button id="enterARVR">Enter VR</button>
-  <button id="startCamera">Start Caewasdmera</button>
+  <button id="startCamera">Start Camera</button>
   <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/OBJLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
@@ -54,40 +46,35 @@
     let cube, renderer, scene, camera;
     let leftCamera, rightCamera;
     let isLVR = false;
-    let isARVR = false;
+    let isStereoAR = false;
     let t = 0;
     let cameraFeedStarted = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000);
+
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.z = 1;
+      camera.position.z = 2;
 
       renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.setClearColor(0x000000, 0);
+      renderer.setClearColor(0x000000, 1);
       document.body.appendChild(renderer.domElement);
 
       cube = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
-        new THREE.MeshNormalMaterial({ transparent: true, opacity: 0.8 })
+        new THREE.MeshNormalMaterial()
       );
-      cube.position.set(0, 0.5, -1);
+      cube.position.set(0, 0, -1);
       scene.add(cube);
-
-      const loader = new THREE.OBJLoader();
-      loader.load('https://threejs.org/examples/models/obj/male02/male02.obj', obj => {
-        obj.scale.set(0.01, 0.01, 0.01);
-        obj.position.set(0.5, -0.5, -1);
-        scene.add(obj);
-      });
 
       renderer.setAnimationLoop(() => {
         t += 0.01;
         cube.position.y = 0.5 + Math.sin(t) * 0.05;
 
-        if (isLVR) {
+        if (isLVR || isStereoAR) {
           renderStereo();
         } else {
           renderer.render(scene, camera);
@@ -155,14 +142,12 @@
 
         if (!navigator.xr || !navigator.xr.isSessionSupported) {
           alert('WebXR not available');
-          console.warn('navigator.xr or isSessionSupported missing');
           return;
         }
 
         const supported = await navigator.xr.isSessionSupported('immersive-ar');
         if (!supported) {
           alert('AR not supported on this device/browser');
-          console.warn('immersive-ar not supported');
           return;
         }
 
@@ -210,26 +195,32 @@
         isLVR = true;
         leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
-        leftCamera.position.set(-0.03, 0, 1);
-        rightCamera.position.set(0.03, 0, 1);
+        leftCamera.position.set(-0.03, 0, 2);
+        rightCamera.position.set(0.03, 0, 2);
       });
 
       document.getElementById('enterARVR').addEventListener('click', async () => {
-        isARVR = true;
-        scene.background = null;
-        renderer.setClearColor(0x000000, 0);
+        isStereoAR = true;
+
+        scene.background = new THREE.Color(0x000000);
+        renderer.setClearColor(0x000000, 1);
+
+        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        leftCamera.position.set(-0.03, 0, 0);
+        rightCamera.position.set(0.03, 0, 0);
 
         if (navigator.xr) {
           try {
-            const session = await navigator.xr.requestSession('immersive-vr', {
-              requiredFeatures: ['local-floor']
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local']
             });
             renderer.xr.setSession(session);
           } catch (err) {
-            console.error('VR session failed:', err);
+            console.error('AR-as-VR session failed:', err);
           }
         } else {
-          alert('WebXR VR not supported');
+          alert('WebXR not supported');
         }
       });
 
@@ -238,4 +229,8 @@
 
         renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
         renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, leftCamera);
 
+        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, right
