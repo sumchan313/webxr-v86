@@ -1,31 +1,106 @@
-const indexTip = landmarks[8];
-const thumbTip = landmarks[4];
-const pinchDistance = Math.hypot(
-  indexTip.x - thumbTip.x,
-  indexTip.y - thumbTip.y
-);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AR Cube Grab</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+    video { display: none; }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline></video>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
 
-// Convert to scene coordinates
-const x = (indexTip.x - 0.5) * 2;
-const y = -(indexTip.y - 0.5) * 2;
-const z = -0.5; // fixed depth for simplicity
+  <script>
+    let isGrabbing = false;
 
-const pinchThreshold = 0.05;
-const grabRadius = 0.3;
+    // Setup Three.js scene
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-if (pinchDistance < pinchThreshold) {
-  const distToCube = Math.hypot(
-    cube.position.x - x,
-    cube.position.y - y
-  );
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.2, 0.2),
+      new THREE.MeshNormalMaterial()
+    );
+    cube.position.z = -0.5;
+    scene.add(cube);
 
-  if (!isGrabbing && distToCube < grabRadius) {
-    isGrabbing = true;
-  }
+    camera.position.z = 1;
 
-  if (isGrabbing) {
-    cube.position.set(x, y, z);
-  }
-} else {
-  isGrabbing = false;
-}
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Setup MediaPipe Hands
+    const hands = new Hands({
+      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(results => {
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        isGrabbing = false;
+        return;
+      }
+
+      const landmarks = results.multiHandLandmarks[0];
+      const indexTip = landmarks[8];
+      const thumbTip = landmarks[4];
+
+      const pinchDistance = Math.hypot(
+        indexTip.x - thumbTip.x,
+        indexTip.y - thumbTip.y
+      );
+
+      const x = (indexTip.x - 0.5) * 2;
+      const y = -(indexTip.y - 0.5) * 2;
+      const z = -0.5;
+
+      const pinchThreshold = 0.05;
+      const grabRadius = 0.3;
+
+      if (pinchDistance < pinchThreshold) {
+        const distToCube = Math.hypot(
+          cube.position.x - x,
+          cube.position.y - y
+        );
+
+        if (!isGrabbing && distToCube < grabRadius) {
+          isGrabbing = true;
+        }
+
+        if (isGrabbing) {
+          cube.position.set(x, y, z);
+        }
+      } else {
+        isGrabbing = false;
+      }
+    });
+
+    // Setup camera input
+    const videoElement = document.getElementById('video');
+    const cameraFeed = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480
+    });
+    cameraFeed.start();
+  </script>
+</body>
+</html>
