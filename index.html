@@ -2,21 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AR Cube Grab Anywhere</title>
+  <title>Google Cardboard VR Cube Grab</title>
   <style>
     body { margin: 0; overflow: hidden; }
-    #enterAR {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 10;
-      padding: 10px 20px;
-      font-size: 16px;
-      background: black;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
     #video {
       position: absolute;
       width: 1px;
@@ -24,10 +12,10 @@
       opacity: 0;
       pointer-events: none;
     }
+    canvas { display: block; }
   </style>
 </head>
 <body>
-  <button id="enterAR">Enter AR</button>
   <video id="video" autoplay playsinline muted></video>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
@@ -35,19 +23,23 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
-    let cube, renderer, scene, camera;
+    let scene, cube, renderer;
+    let leftCamera, rightCamera;
     let isGrabbing = false;
 
     window.addEventListener('DOMContentLoaded', () => {
-      // THREE.js setup
+      // Scene setup
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.z = 2;
+      scene.background = new THREE.Color(0x202020);
 
-      renderer = new THREE.WebGLRenderer({ alpha: true });
+      const aspect = window.innerWidth / 2 / window.innerHeight;
+      leftCamera = new THREE.PerspectiveCamera(70, aspect, 0.01, 100);
+      rightCamera = new THREE.PerspectiveCamera(70, aspect, 0.01, 100);
+      leftCamera.position.z = 2;
+      rightCamera.position.z = 2;
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
 
       // Cube
@@ -58,25 +50,24 @@
       cube.position.set(0, 0, -0.5);
       scene.add(cube);
 
-      renderer.setAnimationLoop(() => {
-        renderer.render(scene, camera);
-      });
+      // Render loop: split screen
+      function renderStereo() {
+        renderer.setScissorTest(true);
 
-      // AR session trigger
-      document.getElementById('enterAR').addEventListener('click', async () => {
-        if (navigator.xr) {
-          try {
-            const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local-floor']
-            });
-            renderer.xr.setSession(session);
-          } catch (err) {
-            console.error('AR session failed:', err);
-          }
-        } else {
-          alert('WebXR AR not supported');
-        }
-      });
+        // Left eye
+        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, leftCamera);
+
+        // Right eye
+        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, rightCamera);
+
+        renderer.setScissorTest(false);
+        requestAnimationFrame(renderStereo);
+      }
+      renderStereo();
 
       // Camera feed for MediaPipe
       const video = document.getElementById('video');
@@ -89,7 +80,7 @@
         console.error("❌ Camera access failed:", err);
       });
 
-      // MediaPipe Hands setup
+      // MediaPipe Hands
       const hands = new Hands({
         locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
