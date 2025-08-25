@@ -225,17 +225,62 @@
       });
 
       function renderStereo() {
-  renderer.setScissorTest(true);
+        renderer.setScissorTest(true);
 
-  // Left eye
-  renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
-  renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
-  renderer.render(scene, leftCamera);
+        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, leftCamera);
 
-  // Right eye
-  renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-  renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
-  renderer.render(scene, rightCamera);
+        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, rightCamera);
 
-  renderer.setScissorTest(false);
-}
+        renderer.setScissorTest(false);
+      }
+
+      const video = document.getElementById('video');
+      navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      }).then(stream => {
+        video.srcObject = stream;
+      }).catch(err => {
+        console.error('Wide-view camera access failed:', err);
+      });
+
+      const hands = new Hands({
+        locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+      });
+
+      hands.onResults(results => {
+        if (results.multiHandLandmarks.length > 0) {
+          const indexTip = results.multiHandLandmarks[0][8];
+          const x = (indexTip.x - 0.5) * 4;
+          const y = -(indexTip.y - 0.5) * 3;
+          cube.position.x = x;
+          cube.position.y = y;
+        }
+      });
+
+      const cameraFeed = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 640,
+        height: 480
+      });
+      cameraFeed.start();
+    });
+  </script>
+</body>
+</html>
