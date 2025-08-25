@@ -48,8 +48,7 @@
   <input type="file" id="uploadOBJ" accept=".obj" />
   <button id="handOverlayMode">Hand Overlay Mode</button>
   <video id="video" autoplay playsinline muted></video>
-
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/OBJLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -60,10 +59,11 @@
     let isLVR = false, isStereoAR = false, handOverlayMode = false;
     let currentModel = null;
     let t = 0;
-    const fingertips = [4, 8, 12, 16, 20];
-    const fingertipMeshes = [];
     let isCubeGrabbed = false;
     let grabOffset = new THREE.Vector3();
+    const fingertips = [4, 8, 12, 16, 20];
+    const fingertipMeshes = [];
+    const handDots = [];
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
@@ -98,10 +98,25 @@
         fingertipMeshes.push(mesh);
       });
 
+      for (let i = 0; i < 21; i++) {
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.005, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+        );
+        scene.add(dot);
+        handDots.push(dot);
+      }
       renderer.setAnimationLoop(() => {
         t += 0.01;
         cube.rotation.x += 0.01;
         cube.rotation.y += 0.01;
+
+        if (isCubeGrabbed && handDots[8]) {
+          cube.position.copy(handDots[8].position).add(grabOffset);
+          cube.material.emissive.set(0xffff00);
+        } else {
+          cube.material.emissive.set(0xff69b4);
+        }
 
         if (renderer.xr.isPresenting) {
           renderer.render(scene, camera);
@@ -111,159 +126,19 @@
           renderer.render(scene, camera);
         }
       });
-            document.getElementById('uploadOBJ').addEventListener('change', event => {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = e => {
-          const loader = new THREE.OBJLoader();
-          const object = loader.parse(e.target.result);
-          object.scale.set(0.5, 0.5, 0.5);
-          object.position.set(0, 0, -1);
-          if (currentModel) scene.remove(currentModel);
-          currentModel = object;
-          scene.add(object);
-        };
-        reader.readAsText(file);
-      });
 
-      document.getElementById('handOverlayMode').addEventListener('click', () => {
-        handOverlayMode = !handOverlayMode;
-        document.getElementById('handOverlayMode').style.background = handOverlayMode ? '#ff1493' : 'pink';
-      });
-
-      document.getElementById('startCamera').addEventListener('click', () => {
-        const video = document.getElementById('video');
-        navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: 1920, height: 1080 }
-        }).then(stream => {
-          video.srcObject = stream;
-        }).catch(err => {
-          alert('Camera access denied: ' + err.message);
-        });
-
-        const hands = new Hands({
-          locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
-        hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.7,
-          minTrackingConfidence: 0.7
-        });
-
-        hands.onResults(results => {
-          if (results.multiHandLandmarks.length > 0) {
-            const landmarks = results.multiHandLandmarks[0];
-
-            fingertips.forEach((i, idx) => {
-              const tip = landmarks[i];
-              const x = (tip.x - 0.5) * 4;
-              const y = -(tip.y - 0.5) * 3;
-              fingertipMeshes[idx].position.set(x, y, -1);
-            });
-
-            const thumbTip = landmarks[4];
-            const indexTip = landmarks[8];
-            const pinkyTip = landmarks[20];
-            const palm = landmarks[9];
-            const wrist = landmarks[0];
-            const dx = indexTip.x - thumbTip.x;
-            const dy = indexTip.y - thumbTip.y;
-            const pinchDistance = Math.sqrt(dx * dx + dy * dy);
-            const z = -1 + palm.z * 2;
-
-            const extendedFingers = fingertips.filter(i => landmarks[i].y < landmarks[i - 2].y);
-            const isFist = extendedFingers.length === 0;
-            const isOpenHand = extendedFingers.length >= 4;
-            const isPinch = pinchDistance < 0.05;
-
-            const x = (indexTip.x - 0.5) * 4;
-            const y = -(indexTip.y - 0.5) * 3;
-            const fingerPos = new THREE.Vector3(x, y, z);
-
-            if (isPinch && !isCubeGrabbed) {
-              const distance = cube.position.distanceTo(fingerPos);
-              if (distance < 0.3) {
-                isCubeGrabbed = true;
-                grabOffset.copy(cube.position).sub(fingerPos);
-              }
-            }
-
-            if (isCubeGrabbed) {
-              cube.position.copy(fingerPos).add(grabOffset);
-              cube.material.emissive.set(0xffff00);
-            } else {
-              cube.material.emissive.set(0xff69b4);
-            }
-
-            if (!isPinch && isCubeGrabbed) {
-              isCubeGrabbed = false;
-            }
-
-            if (extendedFingers.length === 1 && extendedFingers[0] === 8) {
-              const sphere = new THREE.Mesh(
-                new THREE.SphereGeometry(0.05, 16, 16),
-                new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4 })
-              );
-              sphere.position.set(cube.position.x, cube.position.y, cube.position.z - 0.5);
-              scene.add(sphere);
-            }
-
-            if (handOverlayMode) {
-              const xPalm = (palm.x - 0.5) * 4;
-              const yPalm = -(palm.y - 0.5) * 3;
-              cube.position.set(xPalm, yPalm, z);
-
-              const dxPalm = palm.x - wrist.x;
-              const dyPalm = palm.y - wrist.y;
-              const angle = Math.atan2(dyPalm, dxPalm);
-              cube.rotation.z = angle;
-
-              const spread = Math.hypot(thumbTip.x - pinkyTip.x, thumbTip.y - pinkyTip.y);
-              cube.scale.setScalar(spread * 5);
-
-              const maxSpread = 0.3;
-              const intensity = Math.min(spread / maxSpread, 1);
-              cube.material.color.setRGB(1 - intensity, intensity, 0.5);
-
-              const depthFade = Math.max(0, Math.min(1, 1 - Math.abs(z) / 2));
-              cube.material.opacity = depthFade;
-              cube.material.transparent = true;
-            }
-          }
-        });
-
-        const cameraFeed = new Camera(video, {
-          onFrame: async () => {
-            await hands.send({ image: video });
-          },
-          width: 640,
-          height: 480
-        });
-        cameraFeed.start();
-      });
-            document.getElementById('enterAR').addEventListener('click', async () => {
-        if (!navigator.xr) {
-          alert('WebXR not supported in this browser.');
+      document.getElementById('enterAR').addEventListener('click', async () => {
+        if (!navigator.xr || !window.isSecureContext) {
+          alert('WebXR not supported or insecure context.');
           return;
         }
-
-        if (!window.isSecureContext) {
-          alert('WebXR requires HTTPS. Please host this page securely.');
-          return;
-        }
-
         try {
           const session = await navigator.xr.requestSession('immersive-ar', {
             requiredFeatures: ['local-floor', 'hit-test']
           });
           renderer.xr.setSession(session);
-          console.log('Immersive AR session started');
         } catch (err) {
-          console.error('Failed to start AR session:', err);
-          alert('AR session could not be started. Check device compatibility and permissions.');
+          alert('AR session failed.');
         }
       });
 
@@ -279,12 +154,10 @@
         isStereoAR = true;
         scene.background = new THREE.Color(0x000000);
         renderer.setClearColor(0x000000, 1);
-
         leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
         leftCamera.position.set(-0.03, 0, 0);
         rightCamera.position.set(0.03, 0, 0);
-
         if (navigator.xr) {
           try {
             const session = await navigator.xr.requestSession('immersive-ar', {
@@ -292,34 +165,67 @@
             });
             renderer.xr.setSession(session);
           } catch (err) {
-            console.error('AR-as-VR session failed:', err);
-            alert('AR-as-VR session could not be started.');
+            alert('AR-as-VR session failed.');
           }
-        } else {
-          alert('WebXR not supported');
         }
       });
 
       function renderStereo() {
         renderer.setScissorTest(true);
-
         renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
         renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
         renderer.render(scene, leftCamera);
-
         renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
         renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
         renderer.render(scene, rightCamera);
-
         renderer.setScissorTest(false);
       }
 
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById('startCamera').addEventListener('click', () => {
+        const video = document.getElementById('video');
+        const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+
+        hands.onResults(results => {
+          if (results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            landmarks.forEach((lm, i) => {
+              const x = (lm.x - 0.5) * 4;
+              const y = -(lm.y - 0.5) * 3;
+              const z = -1 + lm.z * 2;
+              handDots[i].position.set(x, y, z);
+            });
+
+            const indexTip = handDots[8].position;
+            const thumbTip = handDots[4].position;
+            const pinchDistance = indexTip.distanceTo(thumbTip);
+            const isPinching = pinchDistance < 0.03;
+
+            if (isPinching && !isCubeGrabbed) {
+              const distance = cube.position.distanceTo(indexTip);
+              if (distance < 0.3) {
+                isCubeGrabbed = true;
+                grabOffset.copy(cube.position).sub(indexTip);
+              }
+            }
+
+            if (!isPinching && isCubeGrabbed) {
+              isCubeGrabbed = false;
+            }
+          }
+        });
+
+        const cameraFeed = new Camera(video, {
+          onFrame: async () => {
+            await hands.send({ image: video });
+          },
+          width: 640,
+          height: 480
+        });
+        cameraFeed.start();
       });
     });
   </script>
 </body>
 </html>
+
