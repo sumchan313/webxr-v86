@@ -132,6 +132,7 @@
       });
 
       document.getElementById('startCamera').addEventListener('click', () => {
+        const video = document.getElementById('video');
         navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" }, width: 1920, height: 1080 }
         }).then(stream => {
@@ -164,9 +165,13 @@
 
             const thumbTip = landmarks[4];
             const indexTip = landmarks[8];
+            const pinkyTip = landmarks[20];
+            const palm = landmarks[9];
+            const wrist = landmarks[0];
             const dx = indexTip.x - thumbTip.x;
             const dy = indexTip.y - thumbTip.y;
             const pinchDistance = Math.sqrt(dx * dx + dy * dy);
+            const z = -1 + palm.z * 2;
 
             const extendedFingers = fingertips.filter(i => landmarks[i].y < landmarks[i - 2].y);
             const isFist = extendedFingers.length === 0;
@@ -191,6 +196,16 @@
               scene.add(sphere);
             }
 
+            if (handOverlayMode) {
+              const x = (palm.x - 0.5) * 4;
+              const y = -(palm.y - 0.5) * 3;
+              cube.position.set(x, y, z);
+
+              const dxPalm = palm.x - wrist.x;
+              const dyPalm = palm.y - wrist.y;
+              const angle = Math.atan2(dyPalm, dxPalm);
+              cube.rotation.z = angle;
+
               const spread = Math.hypot(thumbTip.x - pinkyTip.x, thumbTip.y - pinkyTip.y);
               cube.scale.setScalar(spread * 5);
 
@@ -205,7 +220,6 @@
           }
         });
 
-        const video = document.getElementById('video');
         const cameraFeed = new Camera(video, {
           onFrame: async () => {
             await hands.send({ image: video });
@@ -216,7 +230,7 @@
         cameraFeed.start();
       });
 
-     function renderStereo() {
+      function renderStereo() {
         renderer.setScissorTest(true);
 
         renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
@@ -230,48 +244,11 @@
         renderer.setScissorTest(false);
       }
 
-      const video = document.getElementById('video');
-      navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      }).then(stream => {
-        video.srcObject = stream;
-      }).catch(err => {
-        console.error('Wide-view camera access failed:', err);
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
       });
-
-      const hands = new Hands({
-        locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-      });
-
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.7
-      });
-
-      hands.onResults(results => {
-        if (results.multiHandLandmarks.length > 0) {
-          const indexTip = results.multiHandLandmarks[0][8];
-          const x = (indexTip.x - 0.5) * 4;
-          const y = -(indexTip.y - 0.5) * 3;
-          cube.position.x = x;
-          cube.position.y = y;
-        }
-      });
-
-      const cameraFeed = new Camera(video, {
-        onFrame: async () => {
-          await hands.send({ image: video });
-        },
-        width: 640,
-        height: 480
-      });
-      cameraFeed.start();
     });
   </script>
 </body>
