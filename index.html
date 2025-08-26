@@ -51,36 +51,41 @@
       scene = createdScene;
 
       document.getElementById('enterAR').addEventListener('click', async () => {
-        xrHelper = await scene.createDefaultXRExperienceAsync({
-          uiOptions: { sessionMode: 'immersive-ar' },
-          optionalFeatures: ['hit-test', 'hand-tracking']
-        });
-
-        const cube = scene.getMeshByName("cube");
-
-        xrHelper.input.onControllerAddedObservable.add(controller => {
-          controller.onMotionControllerInitObservable.add(motionController => {
-            const grabComponent = motionController.getComponent("grasp");
-            if (grabComponent) {
-              grabComponent.onButtonStateChangedObservable.add(() => {
-                if (grabComponent.pressed) {
-                  const controllerPos = controller.grip ? controller.grip.position : controller.pointer.position;
-                  if (BABYLON.Vector3.Distance(controllerPos, cube.position) < 0.3) {
-                    grabbedMesh = cube;
-                    grabbedMesh.setParent(controller.grip || controller.pointer);
-                    grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 1, 0); // highlight
-                  }
-                } else {
-                  if (grabbedMesh) {
-                    grabbedMesh.setParent(null);
-                    grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 0.4, 0.6); // reset
-                    grabbedMesh = null;
-                  }
-                }
-              });
-            }
+        try {
+          xrHelper = await scene.createDefaultXRExperienceAsync({
+            uiOptions: { sessionMode: 'immersive-ar' },
+            optionalFeatures: ['hit-test', 'hand-tracking']
           });
-        });
+
+          const cube = scene.getMeshByName("cube");
+
+          xrHelper.input.onControllerAddedObservable.add(controller => {
+            controller.onMotionControllerInitObservable.add(motionController => {
+              const grabComponent = motionController.getComponent("grasp");
+              if (grabComponent) {
+                grabComponent.onButtonStateChangedObservable.add(() => {
+                  if (grabComponent.pressed) {
+                    const controllerPos = controller.grip ? controller.grip.position : controller.pointer.position;
+                    if (BABYLON.Vector3.Distance(controllerPos, cube.position) < 0.3) {
+                      grabbedMesh = cube;
+                      grabbedMesh.setParent(controller.grip || controller.pointer);
+                      grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 1, 0); // highlight
+                    }
+                  } else {
+                    if (grabbedMesh) {
+                      grabbedMesh.setParent(null);
+                      grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 0.4, 0.6); // reset
+                      grabbedMesh = null;
+                    }
+                  }
+                });
+              }
+            });
+          });
+        } catch (err) {
+          console.error("Failed to start AR session:", err);
+          alert("AR session could not start. Make sure you're using a compatible device and browser.");
+        }
       });
 
       engine.runRenderLoop(() => {
@@ -94,3 +99,4 @@
   </script>
 </body>
 </html>
+  
