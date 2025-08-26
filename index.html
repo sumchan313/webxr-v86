@@ -2,191 +2,127 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AR Hand Playground</title>
+  <title>Babylon AR + Hand Tracking</title>
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
-    button {
-      position: absolute;
-      top: 20px;
-      z-index: 10;
-      padding: 10px 20px;
-      font-size: 16px;
-      background: pink;
-      color: black;
-      border: none;
-      cursor: pointer;
+    body {
+      margin: 0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
     }
-    #enterAR { left: 20px; }
-    #startCamera { left: 140px; }
-    #handOverlayMode { left: 280px; }
-    #video {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      width: 200px;
-      border: 2px solid pink;
-      z-index: 10;
+    #leftPane, #rightPane {
+      flex: 1;
+      position: relative;
     }
-    #debugInfo {
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #startAR {
       position: absolute;
       bottom: 20px;
       left: 20px;
-      color: lime;
-      font-family: monospace;
-      font-size: 14px;
-      background: rgba(0,0,0,0.6);
-      padding: 10px;
       z-index: 10;
-      display: none;
+      padding: 10px 20px;
+      background: #222;
+      color: white;
+      border: none;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <button id="enterAR">Enter AR</button>
-  <button id="startCamera">Start Camera</button>
-  <button id="handOverlayMode">Hand Overlay Mode</button>
-  <video id="video" autoplay playsinline muted></video>
-  <div id="debugInfo"></div>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <div id="leftPane">
+    <canvas id="renderCanvas"></canvas>
+    <button id="startAR">Start AR</button>
+  </div>
+  <div id="rightPane">
+    <video id="videoFeed" autoplay muted playsinline></video>
+  </div>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+  <script>
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true);
+    let scene;
+
+    async function createScene() {
+      scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+
+      const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2.5, 2, BABYLON.Vector3.Zero(), scene);
+      camera.attachControl(canvas, true);
+
+      const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+      const sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 0.2 }, scene);
+      sphere.position.y = 0.1;
+
+      return scene;
+    }
+
+    document.getElementById("startAR").addEventListener("click", async () => {
+      await createScene();
+      engine.runRenderLoop(() => {
+        scene.render();
+      });
+    });
+
+    window.addEventListener("resize", () => {
+      engine.resize();
+    });
+  </script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script>
-    let scene, camera, renderer, cube;
-    let isCubeGrabbed = false;
-    let grabOffset = new THREE.Vector3();
-    let handOverlayMode = false;
-    const handDots = [];
-    const debugInfo = document.getElementById('debugInfo');
+    const videoElement = document.getElementById("videoFeed");
 
-    window.addEventListener('DOMContentLoaded', () => {
-      scene = new THREE.Scene();
-      scene.background = null;
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
 
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.z = 2;
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.5
+    });
 
-      renderer = new THREE.WebGLRenderer({ alpha: true });
-      renderer.setClearColor(0x000000, 0);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
+    hands.onResults(onResults);
 
-      cube = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 0.2, 0.2),
-        new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.5 })
-      );
-      cube.position.set(0, 0, -1);
-      scene.add(cube);
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480
+    });
+    camera.start();
 
-      const light = new THREE.PointLight(0xff69b4, 1, 10);
-      light.position.set(0, 1, 2);
-      scene.add(light);
+    function onResults(results) {
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
 
-      for (let i = 0; i < 21; i++) {
-        const dot = new THREE.Mesh(
-          new THREE.SphereGeometry(0.02, 8, 8),
-          new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-        );
-        scene.add(dot);
-        handDots.push(dot);
+      const landmarks = results.multiHandLandmarks[0];
+      const indexTip = landmarks[8]; // Index finger tip
+
+      if (scene) {
+        const sphere = scene.getMeshByName("sphere");
+        if (sphere) {
+          sphere.position.x = (indexTip.x - 0.5) * 2;
+          sphere.position.y = -(indexTip.y - 0.5) * 2;
+          sphere.position.z = -(indexTip.z - 0.5) * 2;
+        }
       }
-            renderer.setAnimationLoop(() => {
-        const xrCamera = renderer.xr.getCamera(camera);
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.01;
-
-        if (isCubeGrabbed && handDots[8]) {
-          cube.position.copy(handDots[8].position).add(grabOffset);
-          cube.material.emissive.set(0xffff00);
-        } else {
-          cube.material.emissive.set(0xff69b4);
-        }
-
-        renderer.render(scene, xrCamera);
-      });
-
-      document.getElementById('enterAR').addEventListener('click', async () => {
-        if (!navigator.xr || !window.isSecureContext) {
-          alert('WebXR not supported or insecure context.');
-          return;
-        }
-        try {
-          const session = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['local-floor', 'hit-test']
-          });
-          renderer.xr.setSession(session);
-        } catch (err) {
-          alert('AR session failed.');
-        }
-      });
-            document.getElementById('startCamera').addEventListener('click', () => {
-        const video = document.getElementById('video');
-        const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-
-        hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.7,
-          minTrackingConfidence: 0.7
-        });
-
-        hands.onResults(results => {
-          if (results.multiHandLandmarks.length > 0) {
-            const landmarks = results.multiHandLandmarks[0];
-            const xrCamera = renderer.xr.getCamera(camera);
-            let debugText = '';
-
-            landmarks.forEach((lm, i) => {
-              const x = (lm.x - 0.5) * 2;
-              const y = -(lm.y - 0.5) * 2;
-              const z = -1 + lm.z * 2;
-              const handPos = new THREE.Vector3(x, y, z).applyMatrix4(xrCamera.matrixWorld);
-              handDots[i].position.copy(handPos);
-              debugText += `Dot ${i}: ${handPos.x.toFixed(2)}, ${handPos.y.toFixed(2)}, ${handPos.z.toFixed(2)}\n`;
-            });
-
-            const indexTip = handDots[8].position;
-            const thumbTip = handDots[4].position;
-            const pinchDistance = indexTip.distanceTo(thumbTip);
-            const isPinching = pinchDistance < 0.05; // Calibrated threshold
-            debugText += `Pinch Distance: ${pinchDistance.toFixed(4)}\n`;
-            debugText += `Pinch: ${isPinching ? 'YES' : 'NO'}\n`;
-
-            if (isPinching && !isCubeGrabbed) {
-              const distance = cube.position.distanceTo(indexTip);
-              if (distance < 0.3) {
-                isCubeGrabbed = true;
-                grabOffset.copy(cube.position).sub(indexTip);
-              }
-            }
-
-            if (!isPinching && isCubeGrabbed) {
-              isCubeGrabbed = false;
-            }
-
-            if (handOverlayMode) {
-              debugInfo.style.display = 'block';
-              debugInfo.textContent = debugText;
-            } else {
-              debugInfo.style.display = 'none';
-            }
-          }
-        });
-
-        const cameraFeed = new Camera(video, {
-          onFrame: async () => {
-            await hands.send({ image: video });
-          },
-          width: 640,
-          height: 480
-        });
-        cameraFeed.start();
-      });
-
-      document.getElementById('handOverlayMode').addEventListener('click', () => {
-        handOverlayMode = !handOverlayMode;
-      });
-    }); // End of DOMContentLoaded
+    }
   </script>
 </body>
 </html>
