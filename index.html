@@ -54,6 +54,7 @@
     const canvas = document.getElementById("renderCanvas");
     const engine = new BABYLON.Engine(canvas, true);
     let scene;
+    let arEnabled = false;
 
     async function createScene() {
       scene = new BABYLON.Scene(engine);
@@ -66,15 +67,18 @@
 
       const sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 0.2 }, scene);
       sphere.position.y = 0.1;
-
-      return scene;
     }
 
-    document.getElementById("startAR").addEventListener("click", async () => {
+    (async () => {
       await createScene();
       engine.runRenderLoop(() => {
         scene.render();
       });
+    })();
+
+    document.getElementById("startAR").addEventListener("click", () => {
+      arEnabled = !arEnabled;
+      document.getElementById("startAR").textContent = arEnabled ? "Stop AR" : "Start AR";
     });
 
     window.addEventListener("resize", () => {
@@ -109,18 +113,16 @@
     camera.start();
 
     function onResults(results) {
-      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+      if (!arEnabled || !scene || !results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
 
       const landmarks = results.multiHandLandmarks[0];
       const indexTip = landmarks[8]; // Index finger tip
 
-      if (scene) {
-        const sphere = scene.getMeshByName("sphere");
-        if (sphere) {
-          sphere.position.x = (indexTip.x - 0.5) * 2;
-          sphere.position.y = -(indexTip.y - 0.5) * 2;
-          sphere.position.z = -(indexTip.z - 0.5) * 2;
-        }
+      const sphere = scene.getMeshByName("sphere");
+      if (sphere) {
+        sphere.position.x = (indexTip.x - 0.5) * 2;
+        sphere.position.y = -(indexTip.y - 0.5) * 2;
+        sphere.position.z = -(indexTip.z - 0.5) * 2;
       }
     }
   </script>
