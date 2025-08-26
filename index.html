@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>WebXR Hand Tracking Playground</title>
+  <title>WebXR + BabyJon Hand Tracking</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
     button {
@@ -17,6 +17,14 @@
       border: none;
       cursor: pointer;
     }
+    video {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      border: 2px solid pink;
+      z-index: 10;
+    }
     canvas {
       position: absolute;
       top: 0;
@@ -28,13 +36,14 @@
   </style>
 </head>
 <body>
-  <button id="enterAR">Enter AR with Hand Tracking</button>
+  <button id="enterAR">Enter AR with BabyJon</button>
+  <video id="video" autoplay playsinline muted></video>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script>
     let scene, camera, renderer;
-    let handJoints = {};
-    let jointMeshes = {};
-    let xrRefSpace, xrWebGLBinding;
+    let cube, handDots = [], isCubeGrabbed = false, grabOffset = new THREE.Vector3();
 
     window.addEventListener('DOMContentLoaded', () => {
       scene = new THREE.Scene();
@@ -45,57 +54,88 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
-            document.getElementById('enterAR').addEventListener('click', async () => {
-        if (!navigator.xr || !window.isSecureContext) {
-          alert('WebXR not supported or insecure context.');
-          return;
-        }
 
-        try {
-          const session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local-floor'],
-              optionalFeatures: ['hand-tracking']
+      cube = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.2, 0.2),
+        new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.5 })
+      );
+      cube.position.set(0, 0, -1);
+      scene.add(cube);
+
+      const light = new THREE.PointLight(0xff69b4, 1, 10);
+      light.position.set(0, 1, 2);
+      scene.add(light);
+
+      for (let i = 0; i < 21; i++) {
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.005, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+        );
+        scene.add(dot);
+        handDots.push(dot);
+      }
+            const video = document.getElementById('video');
+      const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+      });
+
+      hands.onResults(results => {
+        if (results.multiHandLandmarks.length > 0) {
+          const landmarks = results.multiHandLandmarks[0];
+          landmarks.forEach((lm, i) => {
+            const x = (lm.x - 0.5) * 2;
+            const y = -(lm.y - 0.5) * 2;
+            const z = -1 + lm.z * 2;
+            handDots[i].position.set(x, y, z);
           });
 
-          renderer.xr.setSession(session);
-          xrRefSpace = await session.requestReferenceSpace('local-floor');
-          xrWebGLBinding = new XRWebGLBinding(session, renderer.getContext());
+          const indexTip = handDots[8].position;
+          const thumbTip = handDots[4].position;
+          const pinchDistance = indexTip.distanceTo(thumbTip);
+          const isPinching = pinchDistance < 0.03;
 
-          session.addEventListener('end', () => {
-            handJoints = {};
-            jointMeshes = {};
-          });
-
-          renderer.setAnimationLoop(() => {
-            const frame = renderer.xr.getFrame();
-            const pose = frame.getViewerPose(xrRefSpace);
-            if (!pose) return;
-
-            for (const source of session.inputSources) {
-              if (source.hand) {
-                for (const jointName of source.hand.keys()) {
-                  const jointPose = frame.getJointPose(source.hand.get(jointName), xrRefSpace);
-                  if (jointPose && jointPose.radius !== null) {
-                    if (!jointMeshes[jointName]) {
-                      const mesh = new THREE.Mesh(
-                        new THREE.SphereGeometry(jointPose.radius, 8, 8),
-                        new THREE.MeshBasicMaterial({ color: 0xff69b4 })
-                      );
-                      scene.add(mesh);
-                      jointMeshes[jointName] = mesh;
-                    }
-                    jointMeshes[jointName].position.copy(jointPose.transform.position);
-                  }
-                }
-              }
+          if (isPinching && !isCubeGrabbed) {
+            const distance = cube.position.distanceTo(indexTip);
+            if (distance < 0.3) {
+              isCubeGrabbed = true;
+              grabOffset.copy(cube.position).sub(indexTip);
             }
+          }
 
-            renderer.render(scene, camera);
-          });
-        } catch (err) {
-          alert('Failed to start AR session with hand tracking.');
-          console.error(err);
+          if (!isPinching && isCubeGrabbed) {
+            isCubeGrabbed = false;
+          }
         }
+      });
+
+      const cameraFeed = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({ image: video });
+        },
+        width: 640,
+        height: 480
+      });
+      cameraFeed.start();
+
+      document.getElementById('enterAR').addEventListener('click', async () => {
+        const session = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local-floor']
+        });
+        renderer.xr.setSession(session);
+      });
+
+      renderer.setAnimationLoop(() => {
+        if (isCubeGrabbed && handDots[8]) {
+          cube.position.copy(handDots[8].position).add(grabOffset);
+          cube.material.emissive.set(0xffff00);
+        } else {
+          cube.material.emissive.set(0xff69b4);
+        }
+        renderer.render(scene, camera);
       });
     });
   </script>
