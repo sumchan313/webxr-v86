@@ -47,11 +47,24 @@
 
       return scene;
     };
-        createScene().then(createdScene => {
+        async function requestCameraAccess() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        console.log("Camera permission granted.");
+      } catch (err) {
+        console.error("Camera permission denied:", err);
+        alert("Camera access is required to enter AR mode.");
+        throw err;
+      }
+    }
+
+    createScene().then(createdScene => {
       scene = createdScene;
 
       document.getElementById('enterAR').addEventListener('click', async () => {
         try {
+          await requestCameraAccess();
+
           xrHelper = await scene.createDefaultXRExperienceAsync({
             uiOptions: { sessionMode: 'immersive-ar' },
             optionalFeatures: ['hit-test', 'hand-tracking']
@@ -69,12 +82,12 @@
                     if (BABYLON.Vector3.Distance(controllerPos, cube.position) < 0.3) {
                       grabbedMesh = cube;
                       grabbedMesh.setParent(controller.grip || controller.pointer);
-                      grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 1, 0); // highlight
+                      grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 1, 0);
                     }
                   } else {
                     if (grabbedMesh) {
                       grabbedMesh.setParent(null);
-                      grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 0.4, 0.6); // reset
+                      grabbedMesh.material.emissiveColor = new BABYLON.Color3(1, 0.4, 0.6);
                       grabbedMesh = null;
                     }
                   }
@@ -83,8 +96,7 @@
             });
           });
         } catch (err) {
-          console.error("Failed to start AR session:", err);
-          alert("AR session could not start. Make sure you're using a compatible device and browser.");
+          console.error("Failed to start AR session or get camera access:", err);
         }
       });
 
@@ -99,4 +111,3 @@
   </script>
 </body>
 </html>
-  
