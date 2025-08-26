@@ -53,7 +53,8 @@
 
         try {
           const session = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['local-floor', 'hand-tracking']
+              requiredFeatures: ['local-floor'],
+              optionalFeatures: ['hand-tracking']
           });
 
           renderer.xr.setSession(session);
