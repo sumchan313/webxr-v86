@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AR + Hand Tracking Playground</title>
+  <title>AR Hand Playground</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
-    button, input[type="file"] {
+    button {
       position: absolute;
       top: 20px;
       z-index: 10;
@@ -18,7 +18,7 @@
     }
     #enterAR { left: 20px; }
     #startCamera { left: 140px; }
-    #handOverlayMode { left: 260px; }
+    #handOverlayMode { left: 280px; }
     #video {
       position: absolute;
       bottom: 20px;
@@ -38,14 +38,6 @@
       padding: 10px;
       z-index: 10;
       display: none;
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 5;
-      pointer-events: none;
-      background: transparent;
     }
   </style>
 </head>
@@ -114,27 +106,18 @@
       });
 
       document.getElementById('enterAR').addEventListener('click', async () => {
-        if (!navigator.xr || typeof navigator.xr.requestSession !== 'function') {
-          alert('WebXR not available in this browser.');
+        if (!navigator.xr || !window.isSecureContext) {
+          alert('WebXR not supported or insecure context.');
           return;
         }
-
-        const supported = await navigator.xr.isSessionSupported('immersive-ar');
-        if (!supported) {
-          alert('Immersive AR not supported on this device.');
-          return;
+        try {
+          const session = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['local-floor', 'hit-test']
+          });
+          renderer.xr.setSession(session);
+        } catch (err) {
+          alert('AR session failed.');
         }
-
-        const session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local-floor', 'hit-test']
-        });
-
-        session.addEventListener('end', () => console.log("XR session ended"));
-        session.addEventListener('visibilitychange', () =>
-          console.log("Visibility changed:", session.visibilityState)
-        );
-
-        renderer.xr.setSession(session);
       });
             document.getElementById('startCamera').addEventListener('click', () => {
         const video = document.getElementById('video');
@@ -165,7 +148,8 @@
             const indexTip = handDots[8].position;
             const thumbTip = handDots[4].position;
             const pinchDistance = indexTip.distanceTo(thumbTip);
-            const isPinching = pinchDistance < 0.03;
+            const isPinching = pinchDistance < 0.05; // Calibrated threshold
+            debugText += `Pinch Distance: ${pinchDistance.toFixed(4)}\n`;
             debugText += `Pinch: ${isPinching ? 'YES' : 'NO'}\n`;
 
             if (isPinching && !isCubeGrabbed) {
