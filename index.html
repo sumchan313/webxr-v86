@@ -138,24 +138,29 @@
       }
     });
 
-    document.getElementById('enterAR').addEventListener('click', async () => {
-      if (!navigator.xr || !window.isSecureContext) {
-        alert('WebXR not supported or insecure context.');
-        return;
-      }
-      try {
-        const session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local-floor', 'hit-test']
-        });
-        session.addEventListener('end', () => console.log("XR session ended"));
-        session.addEventListener('visibilitychange', () =>
-          console.log("Visibility changed:", session.visibilityState)
-        );
-        renderer.xr.setSession(session);
-      } catch (err) {
-        alert('AR session failed.');
-      }
-    });
+if (!navigator.xr || typeof navigator.xr.requestSession !== 'function') {
+  alert('WebXR not available in this browser.');
+  return;
+}
+
+navigator.xr.isSessionSupported('immersive-ar').then(supported => {
+  if (!supported) {
+    alert('Immersive AR not supported on this device.');
+    return;
+  }
+
+  // Proceed to request session
+  const session = await navigator.xr.requestSession('immersive-ar', {
+    requiredFeatures: ['local-floor', 'hit-test']
+  });
+
+  session.addEventListener('end', () => console.log("XR session ended"));
+  session.addEventListener('visibilitychange', () =>
+    console.log("Visibility changed:", session.visibilityState)
+  );
+
+  renderer.xr.setSession(session);
+});
 
     document.getElementById('enterLVR').addEventListener('click', () => {
       isLVR = true;
@@ -280,3 +285,4 @@
 </script>
 </body>
 </html>
+
