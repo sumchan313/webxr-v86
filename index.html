@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AR + Hand Tracking Playground</title>
+  <title>AR + LVR + VR Hand Playground</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
     button, input[type="file"] {
@@ -17,8 +17,11 @@
       cursor: pointer;
     }
     #enterAR { left: 20px; }
-    #startCamera { left: 140px; }
-    #handOverlayMode { left: 260px; }
+    #enterLVR { left: 140px; }
+    #enterARVR { left: 260px; }
+    #startCamera { left: 380px; }
+    #uploadOBJ { left: 500px; }
+    #handOverlayMode { left: 620px; }
     #video {
       position: absolute;
       bottom: 20px;
@@ -26,18 +29,6 @@
       width: 200px;
       border: 2px solid pink;
       z-index: 10;
-    }
-    #debugInfo {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      color: lime;
-      font-family: monospace;
-      font-size: 14px;
-      background: rgba(0,0,0,0.6);
-      padding: 10px;
-      z-index: 10;
-      display: none;
     }
     canvas {
       position: absolute;
@@ -51,55 +42,72 @@
 </head>
 <body>
   <button id="enterAR">Enter AR</button>
+  <button id="enterLVR">Enter LVR</button>
+  <button id="enterARVR">Enter VR</button>
   <button id="startCamera">Start Camera</button>
+  <input type="file" id="uploadOBJ" accept=".obj" />
   <button id="handOverlayMode">Hand Overlay Mode</button>
   <video id="video" autoplay playsinline muted></video>
-  <div id="debugInfo"></div>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script>
-  let scene, camera, renderer, cube;
-  let isCubeGrabbed = false;
-  let grabOffset = new THREE.Vector3();
-  let handOverlayMode = false;
-  const handDots = [];
-  const debugInfo = document.getElementById('debugInfo');
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
-  window.addEventListener('DOMContentLoaded', () => {
-    scene = new THREE.Scene();
-    scene.background = null;
+  <script>
+    let scene, camera, renderer, cube;
+    let leftCamera, rightCamera;
+    let isLVR = false, isStereoAR = false, handOverlayMode = false;
+    let currentModel = null;
+    let t = 0;
+    let isCubeGrabbed = false;
+    let grabOffset = new THREE.Vector3();
+    const fingertips = [4, 8, 12, 16, 20];
+    const fingertipMeshes = [];
+    const handDots = [];
 
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-    camera.position.z = 2;
+    window.addEventListener('DOMContentLoaded', () => {
+      scene = new THREE.Scene();
+      scene.background = null;
 
-    renderer = new THREE.WebGLRenderer({ alpha: true });
-    renderer.setClearColor(0x000000, 0);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true;
-    document.body.appendChild(renderer.domElement);
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
+      camera.position.z = 2;
 
-    cube = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.2, 0.2),
-      new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.5 })
-    );
-    cube.position.set(0, 0, -1);
-    scene.add(cube);
+      renderer = new THREE.WebGLRenderer({ alpha: true });
+      renderer.setClearColor(0x000000, 0);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
 
-    const light = new THREE.PointLight(0xff69b4, 1, 10);
-    light.position.set(0, 1, 2);
-    scene.add(light);
-
-    for (let i = 0; i < 21; i++) {
-      const dot = new THREE.Mesh(
-        new THREE.SphereGeometry(0.02, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+      cube = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.2, 0.2),
+        new THREE.MeshStandardMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.5 })
       );
-      scene.add(dot);
-      handDots.push(dot);
-    }
-          renderer.setAnimationLoop(() => {
-        const xrCamera = renderer.xr.getCamera(camera);
+      cube.position.set(0, 0, -1);
+      scene.add(cube);
+
+      const light = new THREE.PointLight(0xff69b4, 1, 10);
+      light.position.set(0, 1, 2);
+      scene.add(light);
+
+      fingertips.forEach(() => {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.01, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff69b4 })
+        );
+        scene.add(mesh);
+        fingertipMeshes.push(mesh);
+      });
+
+      for (let i = 0; i < 21; i++) {
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.005, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+        );
+        scene.add(dot);
+        handDots.push(dot);
+      }
+      renderer.setAnimationLoop(() => {
+        t += 0.01;
         cube.rotation.x += 0.01;
         cube.rotation.y += 0.01;
 
@@ -110,7 +118,13 @@
           cube.material.emissive.set(0xff69b4);
         }
 
-        renderer.render(scene, xrCamera);
+        if (renderer.xr.isPresenting) {
+          renderer.render(scene, camera);
+        } else if (isLVR || isStereoAR) {
+          renderStereo();
+        } else {
+          renderer.render(scene, camera);
+        }
       });
 
       document.getElementById('enterAR').addEventListener('click', async () => {
@@ -128,48 +142,64 @@
         }
       });
 
-        const session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local-floor', 'hit-test']
-        });
-
-        session.addEventListener('end', () => console.log("XR session ended"));
-        session.addEventListener('visibilitychange', () =>
-          console.log("Visibility changed:", session.visibilityState)
-        );
-
-        renderer.xr.setSession(session);
+      document.getElementById('enterLVR').addEventListener('click', () => {
+        isLVR = true;
+        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        leftCamera.position.set(-0.03, 0, 2);
+        rightCamera.position.set(0.03, 0, 2);
       });
-          document.getElementById('startCamera').addEventListener('click', () => {
+
+      document.getElementById('enterARVR').addEventListener('click', async () => {
+        isStereoAR = true;
+        scene.background = new THREE.Color(0x000000);
+        renderer.setClearColor(0x000000, 1);
+        leftCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        rightCamera = new THREE.PerspectiveCamera(70, window.innerWidth / 2 / window.innerHeight, 0.01, 100);
+        leftCamera.position.set(-0.03, 0, 0);
+        rightCamera.position.set(0.03, 0, 0);
+        if (navigator.xr) {
+          try {
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local']
+            });
+            renderer.xr.setSession(session);
+          } catch (err) {
+            alert('AR-as-VR session failed.');
+          }
+        }
+      });
+
+      function renderStereo() {
+        renderer.setScissorTest(true);
+        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, leftCamera);
+        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+        renderer.render(scene, rightCamera);
+        renderer.setScissorTest(false);
+      }
+
+      document.getElementById('startCamera').addEventListener('click', () => {
         const video = document.getElementById('video');
         const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-
-        hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.7,
-          minTrackingConfidence: 0.7
-        });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
 
         hands.onResults(results => {
           if (results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0];
-            const xrCamera = renderer.xr.getCamera(camera);
-            let debugText = '';
-
             landmarks.forEach((lm, i) => {
-              const x = (lm.x - 0.5) * 2;
-              const y = -(lm.y - 0.5) * 2;
+              const x = (lm.x - 0.5) * 4;
+              const y = -(lm.y - 0.5) * 3;
               const z = -1 + lm.z * 2;
-              const handPos = new THREE.Vector3(x, y, z).applyMatrix4(xrCamera.matrixWorld);
-              handDots[i].position.copy(handPos);
-              debugText += `Dot ${i}: ${handPos.x.toFixed(2)}, ${handPos.y.toFixed(2)}, ${handPos.z.toFixed(2)}\n`;
+              handDots[i].position.set(x, y, z);
             });
 
             const indexTip = handDots[8].position;
             const thumbTip = handDots[4].position;
             const pinchDistance = indexTip.distanceTo(thumbTip);
             const isPinching = pinchDistance < 0.03;
-            debugText += `Pinch: ${isPinching ? 'YES' : 'NO'}\n`;
 
             if (isPinching && !isCubeGrabbed) {
               const distance = cube.position.distanceTo(indexTip);
@@ -181,13 +211,6 @@
 
             if (!isPinching && isCubeGrabbed) {
               isCubeGrabbed = false;
-            }
-
-            if (handOverlayMode) {
-              debugInfo.style.display = 'block';
-              debugInfo.textContent = debugText;
-            } else {
-              debugInfo.style.display = 'none';
             }
           }
         });
@@ -201,11 +224,7 @@
         });
         cameraFeed.start();
       });
-
-      document.getElementById('handOverlayMode').addEventListener('click', () => {
-        handOverlayMode = !handOverlayMode;
-      });
-    }); // End of DOMContentLoaded
+    });
   </script>
 </body>
 </html>
