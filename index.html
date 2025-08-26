@@ -114,16 +114,19 @@
       });
 
       document.getElementById('enterAR').addEventListener('click', async () => {
-        if (!navigator.xr || typeof navigator.xr.requestSession !== 'function') {
-          alert('WebXR not available in this browser.');
+        if (!navigator.xr || !window.isSecureContext) {
+          alert('WebXR not supported or insecure context.');
           return;
         }
-
-        const supported = await navigator.xr.isSessionSupported('immersive-ar');
-        if (!supported) {
-          alert('Immersive AR not supported on this device.');
-          return;
+        try {
+          const session = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['local-floor', 'hit-test']
+          });
+          renderer.xr.setSession(session);
+        } catch (err) {
+          alert('AR session failed.');
         }
+      });
 
         const session = await navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['local-floor', 'hit-test']
@@ -206,3 +209,4 @@
   </script>
 </body>
 </html>
+
