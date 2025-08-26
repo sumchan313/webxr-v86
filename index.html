@@ -206,7 +206,16 @@
         minTrackingConfidence: 0.7
       });
 
+      // Static test dot to confirm rendering
+      const testDot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.02, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+      );
+      testDot.position.set(0, 0, -0.5).applyMatrix4(renderer.xr.getCamera(camera).matrixWorld);
+      scene.add(testDot);
+
       hands.onResults(results => {
+        console.log("MediaPipe results received");
         if (results.multiHandLandmarks.length > 0) {
           const landmarks = results.multiHandLandmarks[0];
           const xrCamera = renderer.xr.getCamera(camera);
@@ -232,11 +241,13 @@
             if (distance < 0.3) {
               isCubeGrabbed = true;
               grabOffset.copy(cube.position).sub(indexTip);
+              console.log("Cube grabbed");
             }
           }
 
           if (!isPinching && isCubeGrabbed) {
             isCubeGrabbed = false;
+            console.log("Cube released");
           }
 
           if (handOverlayMode) {
@@ -245,11 +256,14 @@
           } else {
             debugInfo.style.display = 'none';
           }
+        } else {
+          console.log("No hand landmarks detected");
         }
       });
 
       const cameraFeed = new Camera(video, {
         onFrame: async () => {
+          console.log("Sending frame to MediaPipe");
           await hands.send({ image: video });
         },
         width: 640,
